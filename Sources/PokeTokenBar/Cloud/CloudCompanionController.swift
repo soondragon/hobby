@@ -44,7 +44,7 @@ final class CloudCompanionController {
     private let authentication: (any CloudAuthenticating)?
     private weak var store: CompanionStore?
     private var revision = 0
-    private var ownerID: UUID?
+    private(set) var ownerID: UUID?
     private var generation = UUID()
     private var pending: CompanionState?
     private var inFlight: CloudSaveCommand?
@@ -58,6 +58,11 @@ final class CloudCompanionController {
         isConfigured = configuration != nil
         if configuration == nil { status = CloudError.configuration.localizedDescription }
         store.onCloudMutation = { [weak self] state in self?.enqueue(state) }
+    }
+
+    func encounterToken() async throws -> String {
+        guard alias != nil, let authentication else { throw CloudError.authentication }
+        return try await authentication.accessToken()
     }
 
     func connect(restore: Bool = false) async {

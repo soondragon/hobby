@@ -1165,3 +1165,13 @@ read_when:
   and resolve its absolute path independently of the working directory; encode spaces as `%20`,
   because libpq does not interpret query `+` as a space. A regression parses the final URI using
   libpq and checks the certificate path, while retaining `sslmode=verify-full`.
+
+- Strict Pydantic UUID fields reject UUID strings after FastAPI parses JSON into Python values.
+  An actual HTTP selection request (not a model-only test) reproduced the 422. Allow canonical UUID
+  parsing only on the encounter `roomID` field; keep extra fields, integer counters and actions strict.
+  The restricted PostgreSQL HTTP regression selects an owned individual and rejects owner injection.
+  Save writes already use JSON-mode validation and do not take this parsing path.
+- Account-change observation must occur inside a SwiftUI `body`. Reading an observable account UUID
+  while constructing an NSHostingView captures a fixed value. The encounter boundary now reads it
+  in its body, clears state and stops polling on change. Generation tests reject late responses after
+  clearing; production sign-out interaction remains part of the pending real OAuth verification.

@@ -7,7 +7,7 @@ class AuthenticationBodyLimit:
     def __init__(self, app): self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope['type'] != 'http' or scope['method'] != 'POST' or not scope['path'].startswith('/api/auth/'):
+        if scope['type'] != 'http' or scope['method'] != 'POST' or not scope['path'].startswith(('/api/auth/', '/api/encounter')):
             return await self.app(scope, receive, send)
         body = bytearray()
         try:

@@ -33,21 +33,34 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
         let operation = generation
         guard let clientID = configuration.githubClientID else { throw CloudError.configuration }
         let authorization = try GitHubProfileAuthorization(clientID: clientID)
-        let callback: URL = try await withCheckedThrowingContinuation { continuation in
-            let completion = CloudBrowserCompletion(continuation)
-            let session = ASWebAuthenticationSession(url: authorization.url, callbackURLScheme: "hobbytrainer", completionHandler: completion.handler)
-            session.presentationContextProvider = self
-            // Use the user's configured browser rather than choosing another Chrome profile.
-            session.prefersEphemeralWebBrowserSession = false
-            browserSession = session
-            if !session.start() { completion.finish(url: nil) }
+        let callback: URL
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["TRAINER_PROFILE_MANUAL_BROWSER"] == "1" {
+            callback = try await ManualProfileBrowser.authorize(authorization.url)
+        } else {
+            callback = try await browserCallback(authorization.url)
         }
+        #else
+        callback = try await browserCallback(authorization.url)
+        #endif
         browserSession = nil
         guard operation == generation else { throw CancellationError() }
         let code = try authorization.code(from: callback)
         let value = try await exchange(path: "github/exchange", body: ["code": code, "verifier": authorization.verifier])
         guard operation == generation else { throw CancellationError() }
         try await accept(value, operation: operation)
+    }
+
+    private func browserCallback(_ url: URL) async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
+            let completion = CloudBrowserCompletion(continuation)
+            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "hobbytrainer", completionHandler: completion.handler)
+            session.presentationContextProvider = self
+            // Use the user's configured browser rather than choosing another Chrome profile.
+            session.prefersEphemeralWebBrowserSession = false
+            browserSession = session
+            if !session.start() { completion.finish(url: nil) }
+        }
     }
 
     func restore() async throws {

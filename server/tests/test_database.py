@@ -400,3 +400,112 @@ async def test_email_free_login_preserves_legacy_save_alias_rename_and_session_i
         hashes=db.execute('select access_hash,refresh_hash from trainer_internal.profile_sessions').fetchall()
         assert hashes and all(len(a)==len(r)==64 for a,r in hashes)
         assert all(first['access_token'] not in row for row in hashes)
+
+
+def encounter_player(state=None):
+    from app.profile_sessions import digest
+    token = 'hts_' + uuid4().hex + uuid4().hex
+    github_id = str(uuid4().int >> 64)
+    with psycopg.connect(DSN, autocommit=True) as db:
+        db.execute('set role trainer_api')
+        user = db.execute('select trainer_internal.open_profile_session(%s,%s,%s,%s)',
+                          (github_id, 'encounter-player', digest(token), uuid4().hex + uuid4().hex)).fetchone()[0]
+        db.execute('reset role')
+        if state is not None:
+            db.execute("select set_config('request.jwt.claim.sub',%s,false)", (user['id'],))
+            db.execute('select trainer_internal.write_snapshot(%s,%s,%s,%s)', (0, uuid4(), 'save', Jsonb(state)))
+    return user['id'], token
+
+
+def encounter_request(token, action, **command):
+    from app.profile_sessions import digest
+    with psycopg.connect(DSN, autocommit=True) as db:
+        db.execute('set role trainer_api')
+        return db.execute('select trainer_internal.encounter_request(%s,%s,%s)', (digest(token), action, Jsonb(command))).fetchone()[0]
+
+
+def test_encounters_participant_privacy_ownership_revision_and_release():
+    first = active_state(); second = active_state()
+    second['active']['profile']['instanceID'] = 'other-individual'
+    a, ta = encounter_player(first); b, tb = encounter_player(second); _, outsider = encounter_player()
+    room = encounter_request(ta, 'create')
+    assert len(room['inviteCode']) == 32 and room['members'][0]['isSelf']
+    assert encounter_request(tb, 'join', code=room['inviteCode'])['revision'] == 2
+    with pytest.raises(psycopg.Error): encounter_request(outsider, 'read', roomID=room['id'])
+    assert encounter_request(ta, 'select', roomID=room['id'], expectedRevision=1, individualID='test-individual')['error'] == 'stale_revision'
+    assert encounter_request(ta, 'select', roomID=room['id'], expectedRevision=2, individualID='other-individual')['error'] == 'not_owned'
+    selected = encounter_request(ta, 'select', roomID=room['id'], expectedRevision=2, individualID='test-individual')
+    assert selected['members'][0]['pokemon'] == dict(speciesID=1, level=5, isShiny=False, unownForm=None)
+    other = encounter_request(tb, 'select', roomID=room['id'], expectedRevision=3, individualID='other-individual')
+    assert other['members'][1]['isSelf'] and not other['members'][0]['isSelf']
+    assert all(m['pokemon'] for m in other['members'])
+    assert all(secret not in str(other) for secret in ['seed', 'ivs', 'growthTokens', 'owner_id', 'spentTokens'])
+    with psycopg.connect(DSN, autocommit=True) as db:
+        before = db.execute('select revision from public.trainer_saves where owner_id=%s', (a,)).fetchone()[0]
+        assert before == 1  # Display selections never update growth saves.
+        db.execute("update public.trainer_saves set core=core-'active' where owner_id=%s", (a,))
+    assert encounter_request(tb, 'read', roomID=room['id'])['members'][0]['pokemon'] is None
+    closed = encounter_request(tb, 'leave', roomID=room['id'], expectedRevision=4)
+    assert closed['closed'] and encounter_request(ta, 'read', roomID=room['id'])['closed']
+    assert encounter_request(outsider, 'join', code=room['inviteCode'])['error'] == 'invalid_invitation'
+    assert encounter_request(ta, 'create')['id'] != room['id']
+    with psycopg.connect(DSN, autocommit=True) as db:
+        db.execute('delete from trainer_internal.profile_sessions where owner_id=%s', (b,))
+    with pytest.raises(psycopg.Error): encounter_request(tb, 'roster')
+
+
+def test_encounter_join_race_expiry_and_persistent_guess_limit():
+    _, host = encounter_player(); _, first = encounter_player(); _, second = encounter_player()
+    room = encounter_request(host, 'create')
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = list(workers.map(lambda token: encounter_request(token, 'join', code=room['inviteCode']), [first, second]))
+    assert sum('error' not in result for result in results) == 1
+    assert [result['error'] for result in results if 'error' in result] == ['room_full']
+    _, guest = encounter_player()
+    with psycopg.connect(DSN, autocommit=True) as db:
+        db.execute("update trainer_internal.encounter_rooms set expires_at=clock_timestamp()-interval '1 second' where id=%s", (room['id'],))
+    assert encounter_request(guest, 'join', code=room['inviteCode'])['error'] == 'invalid_invitation'
+    for _ in range(19): assert encounter_request(guest, 'join', code='0'*32)['error'] == 'invalid_invitation'
+    assert encounter_request(guest, 'join', code='0'*32)['error'] == 'rate_limited'
+    with psycopg.connect(DSN, autocommit=True) as db:
+        db.execute('set role trainer_api')
+        for table in ['encounter_rooms', 'encounter_members', 'encounter_attempts']:
+            with pytest.raises(psycopg.Error): db.execute('select * from trainer_internal.'+table)
+
+
+@pytest.mark.asyncio
+async def test_encounter_http_commands_with_real_restricted_pool():
+    import httpx
+    from app.main import create_app
+    from app.profile_sessions import ProfileSessions
+    from psycopg_pool import AsyncConnectionPool
+    _, token = encounter_player(active_state())
+    async def restrict(connection):
+        await connection.execute('set role trainer_api'); await connection.commit()
+    async with AsyncConnectionPool(DSN, min_size=1, max_size=2, configure=restrict, open=False) as pool:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(ProfileSessions(pool))), base_url='http://test') as client:
+            headers = {'Authorization': 'Bearer '+token}
+            assert (await client.get('/api/encounter/roster', headers=headers)).json()['choices'][0]['id'] == 'test-individual'
+            assert (await client.get('/api/encounter/roster?alias=other', headers=headers)).status_code == 400
+            room = (await client.post('/api/encounter', headers=headers, json={'action': 'create'})).json()
+            command = dict(action='select', roomID=room['id'], expectedRevision=1, individualID='test-individual')
+            selected = await client.post('/api/encounter', headers=headers, json=command)
+            assert selected.status_code == 200, selected.text
+            assert selected.json()['revision'] == 2
+            assert (await client.post('/api/encounter', headers=headers, json={**command, 'ownerID':str(uuid4())})).status_code == 422
+            assert (await client.post('/api/encounter', headers=headers, content=b' '*8193)).status_code == 413
+            assert (await client.post('/api/encounter', json={'action':'create'})).status_code == 401
+
+
+def test_encounter_collection_projection_and_simultaneous_selection():
+    state = baseline()
+    state['dex'] = [{'id':'collected-shiny','baseID':1,'finalID':3,'chainOrder':[1,2,3],
+                     'rarity':'common','isShiny':True,'unownForm':None}]
+    _, token = encounter_player(state)
+    choices = encounter_request(token,'roster')['choices']
+    assert choices == [dict(id='collected-shiny',speciesID=3,level=1,isShiny=True,unownForm=None)]
+    room = encounter_request(token,'create')
+    def select(_):return encounter_request(token,'select',roomID=room['id'],expectedRevision=1,individualID='collected-shiny')
+    with ThreadPoolExecutor(max_workers=2) as workers: results=list(workers.map(select,range(2)))
+    assert sum(result.get('revision')==2 for result in results)==1
+    assert [result['error'] for result in results if 'error' in result]==['stale_revision']

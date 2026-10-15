@@ -1,8 +1,8 @@
-# Two-player floating encounter: implementation contract
+# Two-player floating encounter
 
-This is preparation only. Implementation starts after the email-free authentication version has
-been deployed and verified, as requested. No battle/encounter source code or production schema is
-introduced by this document.
+The email-free backend was deployed first on 2026-10-15. The implementation now adds participant-only
+rooms, invitation codes, owned-individual selection and a floating Blue-style display. No combat,
+HP simulation, damage, wins or rewards are implemented.
 
 ## User flow
 
@@ -53,3 +53,42 @@ Signing out closes the panel, clears its in-memory display data and cancels pend
 - Render and inspect actual floating front/back placement and labels; capture both perspectives.
 - Re-run existing cloud save/growth and single-floating-pet regressions. Report local fixtures,
   deployed backend checks and real two-device/account outcomes separately.
+
+## Verification and practical limits
+
+The local PostgreSQL suite covers outsider reads, forged individual IDs, stale revisions, concurrent
+joins and selections, expiry, persistent invitation guess limits, immediate session revocation,
+minimal projections, collection shiny flags, released selections, body limits and real HTTP UUID
+commands. Existing cloud/growth/sprite/native regressions are retained. Room state polls every two
+seconds with bounded failure backoff; full owned rosters refresh every 30 seconds. Hiding the panel
+cancels polling; logout clears and hides its in-memory data. No encounter or Pokémon save is stored locally.
+
+These actual native renders use clearly labelled local samples, not production account data:
+
+![First perspective](../evidence/floating-encounter/first-perspective.png)
+![Second perspective](../evidence/floating-encounter/second-perspective.png)
+
+Production account inspection found an active Pokémon for `soondragon`, while `yongari9292` has no
+server save or owned Pokémon. A real two-account Pokémon display therefore remains unverified
+until the second account starts and obtains its own Pokémon. Do not fabricate production progress
+or describe local fixture results as real-account verification.
+
+Invitations contain 122 random bits, are stored only as SHA-256 digests and expire after 30 minutes.
+Each account may occupy one active room; joining a full/closed/expired room fails. A closed room
+can be replaced with a new invitation. Invitation codes remain only in the host panel's memory;
+a restarted host can recover membership but should leave/recreate to share a fresh code.
+
+## Deployment on 2026-10-15
+
+- Production: https://hobby-trainer.vercel.app, deployment `dpl_C8dkq5i9Lqgochn1LvAXLGPZK9Hp` (Ready).
+- Migration `20261015075521_floating_encounters.sql` applied to `zaxgjflnqgkrrchhomkv`.
+- Final local validation: 50 API/PostgreSQL tests and 278 focused Swift tests passed. Release build
+  and strict local code-signature verification passed. The installed cloud app was updated and its
+  account window launched successfully; this is a local ad-hoc build, not a notarized public release.
+- Production health returned 200. Forged application tokens received 401 at auth, encounter roster
+  and encounter command endpoints. Direct room table reads by `trainer_api` and anonymous room
+  function execution are denied. Profiles=2, saves=1, maximum save revision=7 remained unchanged.
+- GitHub OAuth reauthorization is still pending prior-token revocation approval. No real two-player
+  room or combat result is claimed. Production rooms remain empty; all encounter test data was local.
+
+![Production deployment](../evidence/floating-encounter/production-deployment.png)

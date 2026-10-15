@@ -22,8 +22,8 @@ GitHub is an identity provider only. Users need no Vercel or Supabase administra
    after 30 days. Only SHA-256 digests are stored. Refresh rotates both tokens under a row lock and
    accepts the old refresh token once. Logout revokes this device's session immediately.
 6. `GET/PUT /api/companion` continue to use the same normalized Supabase tables, growth validators,
-   owner-derived identity, revision checks and idempotency logic. The backend calls only three
-   private entry functions as a dedicated least-privilege database role. It cannot SELECT tables or
+   owner-derived identity, revision checks and idempotency logic. The backend calls three authentication/save
+   private entry functions (plus one separate encounter entry point) as a dedicated least-privilege database role. It cannot SELECT tables or
    invoke the raw snapshot writer. Transaction-local claims reset before pooled connections are reused.
 
 The native Keychain namespace is versioned separately from the previous Supabase JWT credentials.
@@ -46,22 +46,25 @@ has been added. Existing growth, collection, items and other Pokémon mechanics 
   Pokémon regression suites. Removing the backend scope guard caused three expected regression
   failures; the guard was restored afterward.
 
-These are local tests. The new flow has **not** been deployed or exercised with a real GitHub OAuth
-exchange. The previous production two-account audit used the old provider and is not evidence for
-this new authentication flow.
+The new API was deployed to `https://hobby-trainer.vercel.app` on 2026-10-15 (initial production
+activation `dpl_7ssigPVjeZ2LRHnZ9M3SwqgcjW54`). Health returned 200, and missing/forged application
+tokens returned 401 through the real restricted database connection. Existing profiles (2), saves
+(1) and revision (7) were preserved. A real GitHub code exchange remains pending browser account
+selection and removal of prior email grants; the historical two-account audit is not evidence for
+this new OAuth exchange. Production build readiness is separate from real login verification.
 
-## Coordinated activation (not performed by this change)
+## Production activation
 
-The migration `20261015071648_public_profile_auth.sql` is tested locally and not applied to production.
-Activation requires that migration, matching backend/native versions and backend-only configuration
+The migration `20261015071648_public_profile_auth.sql` is applied to production.
+Activation uses matching backend/native versions and backend-only configuration
 in `server/.env.example`. The OAuth app's registered callback must be exactly
 `hobbytrainer://auth/callback`; the public client ID in `config/TrainerCloud.json` must match the
 backend client ID. No client secret, DB password, or privileged API key belongs in that JSON or app.
-The existing app registration still points at the old Supabase callback until activation.
+The native callback has been registered exactly with wildcard matching disabled. The old Supabase callback is retained during transition.
 
 Use a dedicated `trainer_api` database login with only the migration's three function grants,
 `NOINHERIT`, no memberships or elevated privileges, and TLS `sslmode=verify-full` with the project CA
-or `sslrootcert=system`. Supabase transaction poolers can use `trainer_api.PROJECT_REF` as the login
+using `sslrootcert=bundled`. The public Supabase CA is bundled in the server and its absolute path is resolved at runtime; system roots alone do not trust this pooler. Supabase transaction poolers can use `trainer_api.PROJECT_REF` as the login
 name; prepared statements are disabled. Pool size is bounded to five per backend instance. The
 migration deliberately creates the role without LOGIN or a password; credentials must be provisioned
 privately during activation. Do not substitute `postgres`, a service-role key, or an administrator role.

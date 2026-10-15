@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct CloudAccountView: View {
     let controller: CloudCompanionController
+    var openEncounter: (() -> Void)? = nil
     @State private var confirmDiscard = false
 
     var body: some View {
@@ -15,6 +16,7 @@ struct CloudAccountView: View {
                 Button("GitHub 로그인") { Task { await controller.connect() } }
                 Button("저장된 로그인으로 연결") { Task { await controller.connect(restore: true) } }
             } else {
+                if let openEncounter { Button("링크 플로팅 펫 열기", action: openEncounter) }
                 if !controller.hasRemoteSave && !controller.hasUnsavedChanges {
                     Button("서버에서 새로 시작") { Task { await controller.initialize() } }
                 }

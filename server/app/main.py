@@ -10,6 +10,7 @@ from .github_profile import GitHubProfileProvider
 from .profile_sessions import ProfileSessions
 from .profile_routes import router
 from .request_limits import AuthenticationBodyLimit
+from .encounter_routes import router as encounter_router
 from psycopg_pool import AsyncConnectionPool
 from .models import SaveCommand
 
@@ -57,6 +58,7 @@ def create_app(gateway=None, profile_provider=None) -> FastAPI:
         return parts[1]
 
     app.include_router(router(authenticated_token))
+    app.include_router(encounter_router(authenticated_token))
 
     @app.get("/api/health")
     async def health():

@@ -20,8 +20,8 @@ actor SpriteStore {
     }
 
     /// A/기존 종은 구캐시 그대로 유지. 다른 안농은 폼·이로치·애니메이션을 모두 구분한다.
-    static func cacheKey(speciesID: Int, animated: Bool, shiny: Bool, unownForm: UnownForm? = nil) -> String {
-        "\(assetName(speciesID: speciesID, unownForm: unownForm))-\(shiny ? "sh" : "")\(animated ? "a" : "s")"
+    static func cacheKey(speciesID: Int, animated: Bool, shiny: Bool, unownForm: UnownForm? = nil, back: Bool = false) -> String {
+        "\(back ? "back-" : "")\(assetName(speciesID: speciesID, unownForm: unownForm))-\(shiny ? "sh" : "")\(animated ? "a" : "s")"
     }
 
     /// PokeAPI는 A를 `201`, 나머지 폼을 `201-b`/`201-exclamation`/`201-question`으로 제공한다.
@@ -33,22 +33,22 @@ actor SpriteStore {
     }
 
     /// 캐시와 다운로드가 같은 폼 이름을 사용한다. 네트워크 없이 요청 경로를 검증할 수 있다.
-    static func spriteURL(speciesID: Int, animated: Bool, shiny: Bool, unownForm: UnownForm? = nil) -> URL {
+    static func spriteURL(speciesID: Int, animated: Bool, shiny: Bool, unownForm: UnownForm? = nil, back: Bool = false) -> URL {
         let name = assetName(speciesID: speciesID, unownForm: unownForm)
         let path = animated ? "versions/generation-v/black-white/animated/" : ""
         let color = shiny ? "shiny/" : ""
         let ext = animated ? "gif" : "png"
-        return URL(string: "\(base)/\(path)\(color)\(name).\(ext)")!
+        return URL(string: "\(base)/\(path)\(back ? "back/" : "")\(color)\(name).\(ext)")!
     }
 
-    func data(speciesID: Int, animated: Bool, shiny: Bool = false, unownForm: UnownForm? = nil) async -> Data? {
+    func data(speciesID: Int, animated: Bool, shiny: Bool = false, unownForm: UnownForm? = nil, back: Bool = false) async -> Data? {
         if animated, !PokemonAssets.hasAnimatedSprite(speciesID: speciesID) { return nil }
-        let key = Self.cacheKey(speciesID: speciesID, animated: animated, shiny: shiny, unownForm: unownForm)
+        let key = Self.cacheKey(speciesID: speciesID, animated: animated, shiny: shiny, unownForm: unownForm, back: back)
         if let d = mem[key] { touch(key); return d }
         let ext = animated ? "gif" : "png"
         let file = directory.appendingPathComponent("\(key).\(ext)")
         if let d = try? Data(contentsOf: file) { remember(key, d); return d }
-        let url = Self.spriteURL(speciesID: speciesID, animated: animated, shiny: shiny, unownForm: unownForm)
+        let url = Self.spriteURL(speciesID: speciesID, animated: animated, shiny: shiny, unownForm: unownForm, back: back)
         guard let (d, resp) = try? await URLSession.shared.data(from: url),
               (resp as? HTTPURLResponse)?.statusCode == 200, !d.isEmpty else { return nil }
         try? d.write(to: file, options: .atomic)   // torn write 방지 — 크래시/강제종료 시 손상 캐시가 남지 않게

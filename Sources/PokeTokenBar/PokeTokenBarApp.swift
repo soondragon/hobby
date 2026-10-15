@@ -16,6 +16,12 @@ struct PokeTokenBarApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+    #if DEBUG
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard ProcessInfo.processInfo.environment["TRAINER_PROFILE_MANUAL_BROWSER"] == "1" else { return }
+        ManualProfileBrowser.finish(urls.count == 1 ? urls.first : nil)
+    }
+    #endif
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private var outsideClickMonitor = OutsideClickMonitor()
@@ -63,6 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
+        if let window = EncounterPreviewBootstrap.windowIfRequested() {
+            cloudPreviewWindow = window
+            return
+        }
         if let window = CloudPreviewBootstrap.windowIfRequested() {
             cloudPreviewWindow = window
             return

@@ -1,7 +1,7 @@
 # Account-owned cloud saves
 
 **Current authentication implementation:** [GitHub public-profile authentication](public-profile-auth.md).
-The new no-email adapter is locally tested and awaiting coordinated activation. Historical production
+The new no-email API is deployed; real OAuth reauthorization remains pending (see the linked status). Historical production
 verification below refers to the earlier Supabase Auth adapter.
 
 The cloud build uses GitHub public-profile authentication and Supabase PostgreSQL, with a Python 3.12 FastAPI API on Vercel.
@@ -150,9 +150,8 @@ Local validation: 34 API/PostgreSQL tests and 161 focused native tests passed, i
 (INFO) and the existing disabled leaked-password check (WARN). Password login is not used by this
 app; application access additionally requires a GitHub identity. No security setting was weakened.
 
-Deployment status: DB migrations are applied. The API/native updates in this branch still require
-Vercel deployment and an updated local app build. Vercel MCP returned 403 for `yong-35b2`; the existing
-CLI account cannot access that scope. Do not claim that pending API code is deployed.
+Deployment status: DB migrations are applied. The email-free API is now deployed through an isolated, authorized CLI session in the verified Chrome profile.
+See public-profile authentication and floating encounter documentation for current activation and verification limits.
 
 ### End-user login permissions
 

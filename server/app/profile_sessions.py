@@ -18,7 +18,8 @@ class ProfileSessions:
     async def call(self, function: str, arguments: tuple):
         # Function identifiers are a closed server-owned allow list, never request data.
         signatures = {'open_profile_session': '(%s,%s,%s,%s)',
-                      'rotate_profile_session': '(%s,%s,%s)', 'profile_request': '(%s,%s,%s)'}
+                      'rotate_profile_session': '(%s,%s,%s)', 'profile_request': '(%s,%s,%s)',
+                      'encounter_request': '(%s,%s,%s)'}
         try:
             async with self.pool.connection(timeout=5) as connection:
                 async with connection.transaction():
@@ -55,3 +56,11 @@ class ProfileSessions:
 
     async def write(self, token, command):
         return await self.request(token, 'write', command.model_dump(mode='json', exclude_none=True))
+
+    async def encounter(self, token, action, command=None):
+        result = await self.call('encounter_request', (digest(token), action, Jsonb(command or {})))
+        # Raise only after the transaction commits, preserving failed invitation attempt counters.
+        if error := result.get('error'):
+            status = {'rate_limited': 429, 'not_owned': 403, 'invalid_invitation': 404}.get(error, 409)
+            raise HTTPException(status, error)
+        return result
