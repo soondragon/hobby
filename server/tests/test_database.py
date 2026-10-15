@@ -78,7 +78,9 @@ def test_concurrent_cas_only_one_winner():
 
 
 def test_normalized_roundtrip_preserves_uint64_and_order():
-    state = {'usedSinceInstall': 4, 'spentTokens': 1, 'inventory': {'mint': 2},
+    state = {'installBaselineSet': True, 'lastDate': '2026-10-15',
+             'claimedTodayTokensByProvider': {'provider': 0},
+             'usedSinceInstall': 4, 'spentTokens': 1, 'inventory': {'mint': 2},
              'candyGrantTier': {'provider': 1}, 'candyWindowEpoch': {'provider': 'day'},
              'dex': [{'id': 'individual-1', 'baseID': 1, 'finalID': 3, 'isShiny': True,
                       'chainOrder': [1,2,3], 'rarity': 'common', 'profile': {'instanceID':'individual-1', 'seed': 18446744073709551615, 'ivs':{key:31 for key in ['hp','attack','defense','specialAttack','specialDefense','speed']},'abilityIsHidden':False,'level':5,'growthTokens':0,'moves':[]}}]}
@@ -89,3 +91,14 @@ def test_normalized_roundtrip_preserves_uint64_and_order():
         with pytest.raises(psycopg.Error):
             write(db, 2, uuid4(), {'inventory': {'mint': -1}})
         assert db.execute('select public.read_trainer_save()').fetchone()[0]['revision'] == 2
+
+
+def test_real_usage_baseline_shape_and_ledger_limits():
+    with psycopg.connect(DSN, autocommit=True) as db:
+        db.execute('select public.validate_trainer_save(%s)', (Jsonb({
+            'installBaselineSet': True, 'lastDate': '2026-10-15',
+            'claimedTodayTokensByProvider': {'provider': 123}}),))
+        with pytest.raises(psycopg.Error) as error:
+            db.execute('select public.validate_trainer_save(%s)', (Jsonb({
+                'claimedTodayTokensByProvider': {'x' * 257: 1}}),))
+        assert error.value.sqlstate == 'PT422'

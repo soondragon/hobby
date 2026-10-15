@@ -1134,3 +1134,10 @@ read_when:
   The account panel now has a fixed frame and the native account host disables intrinsic sizing.
   Verify the actual loading-to-profile and profile-to-signed-out transitions after layout changes;
   a callback/HTTP test alone cannot validate AppKit's window layout cycle.
+
+- A blank cloud-save write does not exercise provider-baseline validation. The first real usage
+  snapshot populated `claimedTodayTokensByProvider` and exposed a PL/pgSQL variable/column
+  collision (`k`), which PostgREST returned as 400. Qualify set-returning function columns with
+  descriptive aliases. Sweep includes the previously qualified operation-history revision column.
+  Regression: `test_real_usage_baseline_shape_and_ledger_limits` plus the normalized write/read
+  round-trip now contain a nonempty provider map; both valid and rejected-key branches are checked.

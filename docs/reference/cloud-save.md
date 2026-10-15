@@ -52,6 +52,7 @@ integer JSON parser and PostgreSQL JSONB preserve their exact value, including `
 - Only the read/write RPCs are intentionally callable by authenticated users. Their security-definer
   execution is deliberate, with an empty search path and ownership derived inside the function.
   Supabase's advisor reports these two deliberate grants; audit their bodies before changing grants.
+  See the [authenticated security-definer advisory](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable).
 - GitHub client secrets live only in Supabase provider configuration. They are absent from source,
   app resources, API environment, and logs. The native bundle contains only public connection settings.
 - Credentials are not placed in query strings or preference files. HTTP redirects carrying bearer
@@ -96,3 +97,21 @@ Native regression selection includes `CloudPersistenceTests`, `CloudSynchronizat
 `CompanionStoreTests`, `CompanionIdentityTests`, and the existing balance/save/profile suites.
 The callback test invokes the actual adapter on a background queue, including a late cancellation.
 Manual checks must cover sign-in, session restoration, new server save, reload, and relaunch.
+
+## Verification on 2026-10-15
+
+- 185 focused Swift tests passed, including cloud isolation, lost-acknowledgement retry, foreign-owner
+  rejection, conflict recovery, background callback delivery, and existing Pokémon mechanics.
+- 14 API/PostgreSQL tests passed against a disposable PostgreSQL 17 container. These cover owner
+  isolation, anonymous/direct-write rejection, concurrent version checks, exact UInt64 round-trip,
+  idempotency, rejected local-import operations, and schema drift.
+- The production health endpoint returned 200; unauthenticated save reads returned 401.
+- The full local cloud app restored the real GitHub account, created a new server-only save,
+  reloaded revision 1, then restarted, persisted the real provider baseline as revision 2, and
+  reloaded revision 2. The corresponding row was independently verified in Supabase.
+- The old local companion file's size and modification time stayed unchanged across this cloud
+  save and application restart. No legacy file was imported.
+
+![Server account and persisted save](../evidence/cloud-save/server-save.png)
+
+![Exact native auth callback configuration](../evidence/cloud-save/auth-configuration.png)
