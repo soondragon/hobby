@@ -1,4 +1,6 @@
 import XCTest
+import AppKit
+import SwiftUI
 @testable import PokeTokenBar
 
 private actor EncounterTestRepository: EncounterServing {
@@ -65,6 +67,23 @@ final class EncounterTests: XCTestCase {
                        "/PokeAPI/sprites/master/sprites/pokemon/back/shiny/6.png")
         XCTAssertNotEqual(SpriteStore.cacheKey(speciesID: 6, animated: false, shiny: false),
                           SpriteStore.cacheKey(speciesID: 6, animated: false, shiny: false, back: true))
+    }
+
+    func testDesktopCanvasHasTransparentPixelsAndNoWindowChrome() throws {
+        _ = NSApplication.shared
+        let window = EncounterWindowStyle.floatingPanel()
+        let host = NSHostingView(rootView: EncounterDesktopView(members: [], settings: {}, hide: {}))
+        host.sizingOptions = []
+        window.contentView = host
+        host.frame = NSRect(x: 0, y: 0, width: 450, height: 402)
+        host.layoutSubtreeIfNeeded()
+        XCTAssertFalse(window.isOpaque)
+        XCTAssertEqual(window.backgroundColor.alphaComponent, 0)
+        XCTAssertFalse(window.styleMask.contains(.titled))
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        XCTAssertEqual(try XCTUnwrap(bitmap.colorAt(x: 1, y: 1)).alphaComponent, 0, accuracy: 0.01)
+        window.close()
     }
 
     func testCommandsNeverContainAnotherOwnerOrPokemonStats() throws {

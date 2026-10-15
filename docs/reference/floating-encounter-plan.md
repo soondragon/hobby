@@ -92,3 +92,23 @@ a restarted host can recover membership but should leave/recreate to share a fre
   room or combat result is claimed. Production rooms remain empty; all encounter test data was local.
 
 ![Production deployment](../evidence/floating-encounter/production-deployment.png)
+
+## Transparent desktop presentation (local update)
+
+The native encounter uses a borderless, nonopaque floating NSPanel with a clear background and no
+window shadow. Only the two sprites and individual speech bubbles are drawn. Original front/back
+positions remain, with full-color sprites. Hover controls or a right-click menu open the separate
+invitation/selection settings window, or hide the pets. Hiding cancels polling as before.
+
+The local sample is running in `Floating Encounter Preview.app`; its separate settings window
+labels the data as local examples and switches the viewer perspective. The installed cloud app
+has the same transparent presentation. This UI-only update does not change the deployed API,
+authentication, growth data, ownership checks or combat scope.
+
+Validation: 14 focused native tests passed, including a real NSHostingView bitmap render that
+asserts zero alpha in an empty canvas corner, plus borderless/nonopaque window properties.
+Release build and local signature verification passed. Both front/back sample perspectives and
+opening the separate settings window through the pet context menu were inspected in the actual app.
+
+![Transparent pets, local sample](../evidence/floating-encounter/transparent-pets.png)
+![Opposite perspective, local sample](../evidence/floating-encounter/transparent-opponent.png)

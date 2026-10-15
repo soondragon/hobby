@@ -5,10 +5,12 @@ import SwiftUI
 final class EncounterPanel: NSObject, NSWindowDelegate {
     private let panel: NSPanel
     private let controller: EncounterController
+    private let controls: NSPanel
     init(account: CloudCompanionController, serviceURL: URL) {
         controller = EncounterController(repository: EncounterRepository(serviceURL: serviceURL), token: { try await account.encounterToken() })
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 472, height: 610),
-                        styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = EncounterWindowStyle.floatingPanel()
+        controls = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 472, height: 280),
+                           styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
         super.init()
         panel.title = "포켓몬 · 링크 플로팅 펫"
         panel.level = .floating
@@ -16,22 +18,46 @@ final class EncounterPanel: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.delegate = self
+        controls.title = "링크 펫 · 연결과 포켓몬 선택"
+        controls.isReleasedWhenClosed = false
+        controls.level = .floating
+        let controlHost = NSHostingView(rootView: EncounterPanelView(controller: controller))
+        controlHost.sizingOptions = []
+        controls.contentView = controlHost
+        controls.center()
         let host = NSHostingView(rootView: EncounterAccountBoundary(account: account, controller: controller,
-            close: { [weak self] in self?.panel.orderOut(nil) }))
+            settings: { [weak self] in self?.showControls() },
+            close: { [weak self] in self?.hide(clear: true) },
+            hide: { [weak self] in self?.hide() }))
         host.sizingOptions = []
         panel.contentView = host
         panel.center()
     }
-    func open() { panel.makeKeyAndOrderFront(nil); controller.start() }
-    func windowWillClose(_ notification: Notification) { controller.stop() }
+    func open() {
+        panel.makeKeyAndOrderFront(nil); controller.start()
+        if controller.room == nil { showControls() }
+    }
+    private func showControls() {
+        if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
+            controls.setFrameOrigin(NSPoint(x: min(max(panel.frame.maxX + 12, visible.minX), visible.maxX - controls.frame.width),
+                                            y: min(max(panel.frame.minY, visible.minY), visible.maxY - controls.frame.height)))
+        }
+        controls.makeKeyAndOrderFront(nil)
+    }
+    private func hide(clear: Bool = false) {
+        controller.stop(clear: clear); panel.orderOut(nil); controls.orderOut(nil)
+    }
+    func windowWillClose(_ notification: Notification) { hide() }
 }
 
 private struct EncounterAccountBoundary: View {
     let account: CloudCompanionController
     let controller: EncounterController
+    let settings: () -> Void
     let close: () -> Void
+    let hide: () -> Void
     var body: some View {
-        EncounterPanelView(controller: controller)
+        EncounterDesktopView(members: controller.room?.members ?? [], settings: settings, hide: hide)
             .onChange(of: account.ownerID) { _, _ in controller.stop(clear: true); close() }
     }
 }
@@ -41,7 +67,6 @@ struct EncounterPanelView: View {
     @Bindable var controller: EncounterController
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            EncounterBattleView(members: controller.room?.members ?? [])
             Text(controller.status).font(.caption).foregroundStyle(controller.connected ? .secondary : .primary)
                 .frame(height: 28, alignment: .leading)
             if let room = controller.room, !room.closed {
@@ -73,7 +98,7 @@ struct EncounterPanelView: View {
                 .font(.caption2).foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
-        .padding(16).frame(width: 472, height: 610, alignment: .topLeading)
+        .padding(16).frame(width: 472, height: 280, alignment: .topLeading)
         .disabled(controller.busy)
     }
 }
