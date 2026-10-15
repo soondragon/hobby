@@ -19,7 +19,7 @@ class ProfileSessions:
         # Function identifiers are a closed server-owned allow list, never request data.
         signatures = {'open_profile_session': '(%s,%s,%s,%s)',
                       'rotate_profile_session': '(%s,%s,%s)', 'profile_request': '(%s,%s,%s)',
-                      'encounter_request': '(%s,%s,%s)'}
+                      'encounter_request': '(%s,%s,%s)', 'encounter_skill_request': '(%s,%s,%s)'}
         try:
             async with self.pool.connection(timeout=5) as connection:
                 async with connection.transaction():
@@ -63,4 +63,10 @@ class ProfileSessions:
         if error := result.get('error'):
             status = {'rate_limited': 429, 'not_owned': 403, 'invalid_invitation': 404}.get(error, 409)
             raise HTTPException(status, error)
+        return result
+
+    async def skill(self, token, action, command):
+        result = await self.call('encounter_skill_request', (digest(token), action, Jsonb(command)))
+        if error := result.get('error'):
+            raise HTTPException({'not_owned':403, 'illegal_move':422, 'cooldown':429}.get(error,409), error)
         return result

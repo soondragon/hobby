@@ -3,8 +3,8 @@ import SwiftUI
 
 @MainActor
 enum EncounterWindowStyle {
-    static func floatingPanel() -> NSPanel {
-        let panel = DesktopEncounterWindow(contentRect: NSRect(x: 0, y: 0, width: 450, height: 402),
+    static func floatingPanel(size: NSSize = NSSize(width: 450, height: 402)) -> NSPanel {
+        let panel = DesktopEncounterWindow(contentRect: NSRect(origin: .zero, size: size),
                                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear

@@ -509,3 +509,90 @@ def test_encounter_collection_projection_and_simultaneous_selection():
     with ThreadPoolExecutor(max_workers=2) as workers: results=list(workers.map(select,range(2)))
     assert sum(result.get('revision')==2 for result in results)==1
     assert [result['error'] for result in results if 'error' in result]==['stale_revision']
+
+
+def skill_state(species, level):
+    state=active_state()
+    mon=state['active']
+    mon.update(baseID=species,pathIDs=[species],plannedPathIDs=[species],totalForms=1)
+    mon['profile'].update(instanceID='skill-individual-'+str(species),level=level)
+    return state
+
+
+def skill_request(token, action, **command):
+    from app.profile_sessions import digest
+    with psycopg.connect(DSN,autocommit=True) as db:
+        db.execute('set role trainer_api')
+        return db.execute('select trainer_internal.encounter_skill_request(%s,%s,%s)',(digest(token),action,Jsonb(command))).fetchone()[0]
+
+
+def skill_room():
+    a,ta=encounter_player(skill_state(6,60));b,tb=encounter_player(skill_state(9,60))
+    room=encounter_request(ta,'create')
+    encounter_request(tb,'join',code=room['inviteCode'])
+    encounter_request(ta,'select',roomID=room['id'],expectedRevision=2,individualID='skill-individual-6')
+    room=encounter_request(tb,'select',roomID=room['id'],expectedRevision=3,individualID='skill-individual-9')
+    return a,ta,b,tb,room
+
+
+def test_skills_legal_levels_idempotency_cooldown_and_private_events():
+    a,ta,b,tb,room=skill_room();_,outside=encounter_player()
+    moves=skill_request(ta,'moves',roomID=room['id'])['moveIDs']
+    assert moves==[17,163,53,83]
+    command=dict(roomID=room['id'],expectedRevision=4,requestID=str(uuid4()),moveID=53)
+    assert skill_request(ta,'attack',**{**command,'moveID':57})['error']=='illegal_move'
+    with pytest.raises(psycopg.Error):skill_request(outside,'moves',roomID=room['id'])
+    with ThreadPoolExecutor(max_workers=4) as workers:results=list(workers.map(lambda _:skill_request(ta,'attack',**command),range(4)))
+    assert all(r['revision']==5 and len(r['events'])==1 for r in results)
+    event=results[0]['events'][0]
+    assert event['actorIsSelf'] and event['moveName']=='화염방사' and event['type']=='fire'
+    opposite=encounter_request(tb,'read',roomID=room['id'])
+    assert not opposite['events'][0]['actorIsSelf']
+    assert 0<event['startsAt']-float(results[0]['serverTime'])<=0.8
+    assert all(secret not in str(opposite['events']) for secret in ['owner_id','request_id','seed','ivs'])
+    assert skill_request(ta,'attack',**{**command,'moveID':83})['error']=='request_reused'
+    second={**command,'requestID':str(uuid4()),'expectedRevision':5}
+    assert skill_request(ta,'attack',**second)['error']=='cooldown'
+    # A simultaneous opponent response is allowed and preserves both projectiles.
+    reply=skill_request(tb,'attack',**{**second,'moveID':56})
+    assert reply['revision']==6 and len(reply['events'])==2
+    with psycopg.connect(DSN,autocommit=True) as db:
+        assert db.execute('select revision from public.trainer_saves where owner_id=%s',(a,)).fetchone()[0]==1
+        db.execute('delete from trainer_internal.profile_sessions where owner_id=%s',(b,))
+    with pytest.raises(psycopg.Error):skill_request(tb,'moves',roomID=room['id'])
+
+
+def test_low_level_moves_release_and_bounded_event_retention():
+    a,ta,b,tb,room=skill_room()
+    with psycopg.connect(DSN,autocommit=True) as db:
+        assert db.execute('select trainer_internal.encounter_legal_moves(6,5)').fetchone()[0]!=[17,163,53,83]
+    revision=4
+    for _ in range(36):
+        with psycopg.connect(DSN,autocommit=True) as db:
+            db.execute("update trainer_internal.encounter_skill_events set created_at=clock_timestamp()-interval '10 seconds' where room_id=%s",(room['id'],))
+        result=skill_request(ta,'attack',roomID=room['id'],expectedRevision=revision,requestID=str(uuid4()),moveID=53)
+        revision=result['revision']
+    with psycopg.connect(DSN,autocommit=True) as db:
+        assert db.execute('select count(*) from trainer_internal.encounter_skill_events where room_id=%s',(room['id'],)).fetchone()[0]==32
+        db.execute("update public.trainer_saves set core=core-'active' where owner_id=%s",(a,))
+    assert skill_request(ta,'attack',roomID=room['id'],expectedRevision=revision,requestID=str(uuid4()),moveID=53)['error']=='not_owned'
+
+
+@pytest.mark.asyncio
+async def test_skill_http_with_real_role_and_untrusted_payload_denial():
+    import httpx
+    from app.main import create_app
+    from app.profile_sessions import ProfileSessions
+    from psycopg_pool import AsyncConnectionPool
+    _,token,_,_,room=skill_room()
+    async def restrict(conn):await conn.execute('set role trainer_api');await conn.commit()
+    async with AsyncConnectionPool(DSN,min_size=1,max_size=2,configure=restrict,open=False) as pool:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(ProfileSessions(pool))),base_url='http://test') as client:
+            headers={'Authorization':'Bearer '+token}
+            result=await client.get('/api/encounter/'+room['id']+'/moves',headers=headers)
+            assert result.status_code==200 and len(result.json()['moves'])==4
+            body=dict(roomID=room['id'],expectedRevision=4,requestID=str(uuid4()),moveID=53)
+            assert (await client.post('/api/encounter/attack',headers=headers,json={**body,'power':99999})).status_code==422
+            assert (await client.post('/api/encounter/attack',headers=headers,json=body)).status_code==200
+            assert (await client.post('/api/encounter/attack',json=body)).status_code==401
+            assert (await client.post('/api/encounter/attack',headers=headers,content=b' '*8193)).status_code==413

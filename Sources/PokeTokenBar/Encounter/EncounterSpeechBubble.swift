@@ -3,11 +3,12 @@ import SwiftUI
 struct EncounterSpeechBubble: View {
     let member: EncounterMember?
     let placeholder: String
+    var message: String? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(member.map { "@" + $0.alias } ?? placeholder)
                 .font(.system(size: 13, weight: .semibold)).lineLimit(1).truncationMode(.middle)
-            Text(member?.pokemon?.title ?? "포켓몬 선택 대기")
+            Text(message ?? member?.pokemon?.title ?? "포켓몬 선택 대기")
                 .font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(.secondary)
         }
         .foregroundStyle(Color(red: 0.16, green: 0.19, blue: 0.25))

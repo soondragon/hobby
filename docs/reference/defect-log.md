@@ -1175,3 +1175,5 @@ read_when:
   while constructing an NSHostingView captures a fixed value. The encounter boundary now reads it
   in its body, clears state and stops polling on change. Generation tests reject late responses after
   clearing; production sign-out interaction remains part of the pending real OAuth verification.
+
+- Simultaneous skill speech bubbles initially chose the latest global event, suppressing the other actor's cast name. Select the latest event for that actor first and use incoming events only for hit state. Inspected the actual simultaneous fire/water renderer with both names visible. Historical move imports must apply post-version changelog values per field and skip unsupported null-PP shadow moves; catalog regressions assert Gen V powers and complete standard-move coverage.

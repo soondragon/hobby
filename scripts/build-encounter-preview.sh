@@ -3,7 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 swift build
 TRAINER_APP="$HOME/Applications/Floating Encounter Preview.app"
-mkdir -p "$TRAINER_APP/Contents/MacOS"
+mkdir -p "$TRAINER_APP/Contents/MacOS" "$TRAINER_APP/Contents/Resources"
+cp server/data/move-catalog.json "$TRAINER_APP/Contents/Resources/MoveCatalog.json"
 cp "$(swift build --show-bin-path)/PokeTokenBar" "$TRAINER_APP/Contents/MacOS/PokeTokenBar"
 python3 - "$TRAINER_APP/Contents/Info.plist" <<'PY'
 import plistlib,sys

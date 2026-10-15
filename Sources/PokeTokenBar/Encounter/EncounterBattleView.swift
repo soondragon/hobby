@@ -22,7 +22,7 @@ struct EncounterBattleView: View {
     }
 }
 
-private struct EncounterSprite: View {
+struct EncounterSprite: View {
     let pokemon: EncounterPokemon?
     let back: Bool
     @State private var image: NSImage?

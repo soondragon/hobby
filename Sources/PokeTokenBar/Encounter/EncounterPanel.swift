@@ -3,63 +3,24 @@ import SwiftUI
 
 @MainActor
 final class EncounterPanel: NSObject, NSWindowDelegate {
-    private let panel: NSPanel
     private let controller: EncounterController
     private let controls: NSPanel
+    private lazy var stage = DesktopBattleStage(settings: { [weak self] in self?.showControls() }, hide: { [weak self] in self?.hide() })
     init(account: CloudCompanionController, serviceURL: URL) {
         controller = EncounterController(repository: EncounterRepository(serviceURL: serviceURL), token: { try await account.encounterToken() })
-        panel = EncounterWindowStyle.floatingPanel()
-        controls = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 472, height: 280),
+        controls = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 472, height: 490),
                            styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
         super.init()
-        panel.title = "포켓몬 · 링크 플로팅 펫"
-        panel.level = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.isReleasedWhenClosed = false
-        panel.hidesOnDeactivate = false
-        panel.delegate = self
-        controls.title = "링크 펫 · 연결과 포켓몬 선택"
+        controls.title = "링크 펫 · 연결과 기술"
         controls.isReleasedWhenClosed = false
         controls.level = .floating
-        let controlHost = NSHostingView(rootView: EncounterPanelView(controller: controller))
-        controlHost.sizingOptions = []
-        controls.contentView = controlHost
-        controls.center()
-        let host = NSHostingView(rootView: EncounterAccountBoundary(account: account, controller: controller,
-            settings: { [weak self] in self?.showControls() },
-            close: { [weak self] in self?.hide(clear: true) },
-            hide: { [weak self] in self?.hide() }))
-        host.sizingOptions = []
-        panel.contentView = host
-        panel.center()
+        let host = NSHostingView(rootView: EncounterPanelView(controller: controller))
+        host.sizingOptions = []; controls.contentView = host; controls.center()
+        stage.observe(account: account,controller: controller,settings: { [weak self] in self?.showControls() },hide: { [weak self] in self?.hide() })
     }
-    func open() {
-        panel.makeKeyAndOrderFront(nil); controller.start()
-        if controller.room == nil { showControls() }
-    }
-    private func showControls() {
-        if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
-            controls.setFrameOrigin(NSPoint(x: min(max(panel.frame.maxX + 12, visible.minX), visible.maxX - controls.frame.width),
-                                            y: min(max(panel.frame.minY, visible.minY), visible.maxY - controls.frame.height)))
-        }
-        controls.makeKeyAndOrderFront(nil)
-    }
-    private func hide(clear: Bool = false) {
-        controller.stop(clear: clear); panel.orderOut(nil); controls.orderOut(nil)
-    }
-    func windowWillClose(_ notification: Notification) { hide() }
-}
-
-private struct EncounterAccountBoundary: View {
-    let account: CloudCompanionController
-    let controller: EncounterController
-    let settings: () -> Void
-    let close: () -> Void
-    let hide: () -> Void
-    var body: some View {
-        EncounterDesktopView(members: controller.room?.members ?? [], settings: settings, hide: hide)
-            .onChange(of: account.ownerID) { _, _ in controller.stop(clear: true); close() }
-    }
+    func open() { stage.open(); controller.start(); if controller.room == nil { showControls() } }
+    private func showControls() { controls.makeKeyAndOrderFront(nil) }
+    private func hide() { controller.stop(); stage.stop(); controls.orderOut(nil) }
 }
 
 @MainActor
@@ -94,11 +55,25 @@ struct EncounterPanelView: View {
                     Button("참여") { Task { await controller.perform("join") } }.disabled(controller.invitation.count != 32)
                 }
             }
+            if !controller.skills.isEmpty {
+                Text("현재 레벨의 기술 · 블랙2·화이트2").font(.caption).bold()
+                ForEach(controller.skills) { move in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(move.nameKo).font(.callout).bold()
+                            Text(move.summary).font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("시전") { Task { await controller.attack(move) } }
+                            .disabled(!controller.connected || controller.room?.members.filter({ $0.pokemon != nil }).count != 2)
+                    }.help(move.description)
+                }
+            }
             Text("내 서버 포켓몬만 선택할 수 있어요. 선택 정보만 공유되며 성장 데이터는 바뀌지 않습니다.")
                 .font(.caption2).foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
-        .padding(16).frame(width: 472, height: 280, alignment: .topLeading)
+        .padding(16).frame(width: 472, height: 490, alignment: .topLeading)
         .disabled(controller.busy)
     }
 }

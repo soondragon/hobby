@@ -1,8 +1,7 @@
 # Two-player floating encounter
 
 The email-free backend was deployed first on 2026-10-15. The implementation now adds participant-only
-rooms, invitation codes, owned-individual selection and a floating Blue-style display. No combat,
-HP simulation, damage, wins or rewards are implemented.
+rooms, invitation codes, owned-individual selection and a floating Blue-style display. Skill casting is now implemented as a visual event. HP simulation, damage, wins and rewards remain outside this version.
 
 ## User flow
 
@@ -13,8 +12,7 @@ HP simulation, damage, wins or rewards are implemented.
    its own individual. Both participants explicitly choose what they share.
 3. Each player sees their own Pokémon at the lower left from behind, and the opponent at the upper
    right from the front, using the classic Blue battle composition. Show aliases, species and level.
-   This stage displays the pair only: attack commands, damage, HP simulation, winners and rewards
-   require a separate implementation and are not represented as working features.
+   Choose a legal skill to cast a synchronized visual event across the desktop. Damage, HP, winners and rewards are not calculated.
 4. Changing one's selection updates the other participant's floating panel. Leaving, signing out,
    hiding the panel, loss of connectivity and expiry have explicit states and bounded cleanup.
 
@@ -59,7 +57,7 @@ Signing out closes the panel, clears its in-memory display data and cancels pend
 The local PostgreSQL suite covers outsider reads, forged individual IDs, stale revisions, concurrent
 joins and selections, expiry, persistent invitation guess limits, immediate session revocation,
 minimal projections, collection shiny flags, released selections, body limits and real HTTP UUID
-commands. Existing cloud/growth/sprite/native regressions are retained. Room state polls every two
+commands. Existing cloud/growth/sprite/native regressions are retained. Room state polls every 0.5
 seconds with bounded failure backoff; full owned rosters refresh every 30 seconds. Hiding the panel
 cancels polling; logout clears and hides its in-memory data. No encounter or Pokémon save is stored locally.
 
@@ -112,3 +110,21 @@ opening the separate settings window through the pet context menu were inspected
 
 ![Transparent pets, local sample](../evidence/floating-encounter/transparent-pets.png)
 ![Opposite perspective, local sample](../evidence/floating-encounter/transparent-opponent.png)
+
+## Monitor-wide skill events (2026-10-15)
+
+PokéAPI source revision `81d20919845b6a445969b9265aab5cec6b04cece` supplies 649 species, 559 moves and 40,028 learnset rows, pinned to Black 2 / White 2, matching the existing game. Historical move changelogs restore Gen V values (Flamethrower 95, Hydro Pump 120). Korean names are retained; missing Gen V Korean descriptions fall back to source English. Reproduce with `scripts/sync-move-catalog.py --revision <revision>`. Source CSV hashes are in `server/data/move-catalog.json`.
+
+The private server catalog includes 9,082 natural learnset entries. Only an owned selected Pokémon's latest four level-up moves may be cast. The client submits identifiers only. The server checks participant/session/ownership, legal moves, room revision, UUID idempotency and a 2.5-second player cooldown. It retains at most 32 events per room and returns eight. Events do not mutate growth saves.
+
+Two draggable clear pet panels are accompanied by a clear, click-through monitor overlay. Fire/water streams, electricity, physical slashes and status rings are selected from canonical type/class/target data. Shared start times, bounded replay deduplication, hit motion and speech bubbles are supported. This is type-based animation, not 559 individually hand-authored animations. Idle and hidden stages stop animation work.
+
+Validation: 55 API/PostgreSQL tests and 283 focused Swift tests passed, including outsider/forged skill denial, concurrent idempotent commands, cooldown, released ownership, bounded retention and unchanged growth revision. Actual native rendering was inspected. The screenshot below is the inspection window using the production renderer with local sample Pokémon; its backdrop is for inspection only. Real two-account casting remains unverified because the second production account has no owned Pokémon and current OAuth exchange has not been revalidated.
+
+![Actual native skill render, local sample](../evidence/skill-effects/local-render.png)
+
+Migration `20261015082301_encounter_skill_events.sql` is applied. Direct catalog/event table reads by the API role are denied. Security advisors report policy-free RLS on intentionally private function-only tables, plus the pre-existing Supabase password leak-check warning (the application uses GitHub authentication). See https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy and https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection.
+
+Production deployment `dpl_8ogJAEfMzaaXA99RPUQacT6cgnYK` is Ready at https://hobby-trainer.vercel.app. `/api/health` and species 6/649 catalogs returned 200; species 650 returned 404; unauthenticated room skills returned 401. Production Flamethrower power was checked as 95. Release build, strict signature verification, installation and account-window startup passed. This remains an ad-hoc local app, not a notarized public release.
+
+![Production Ready](../evidence/skill-effects/production-ready.png)
