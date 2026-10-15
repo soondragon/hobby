@@ -6,7 +6,7 @@ protocol CloudAuthenticating: AnyObject {
     func signIn() async throws
     func restore() async throws
     func accessToken() async throws -> String
-    func signOut() throws
+    func signOut() async throws
 }
 
 protocol CloudSaveServing: Sendable {

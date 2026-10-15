@@ -26,7 +26,7 @@ struct CloudAccountView: View {
                     if controller.hasUnsavedChanges { confirmDiscard = true }
                     else { Task { await controller.reload() } }
                 }
-                Button("로그아웃") { controller.disconnect() }.disabled(controller.hasUnsavedChanges)
+                Button("로그아웃") { Task { await controller.disconnect() } }.disabled(controller.hasUnsavedChanges)
             }
             Text("GitHub alias는 표시 이름입니다. 세이브 접근은 로그인 계정으로만 허용됩니다.")
                 .font(.caption).foregroundStyle(.secondary)

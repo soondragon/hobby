@@ -58,6 +58,26 @@ final class CloudPersistenceTests: XCTestCase {
         XCTAssertFalse(store.canModifyCompanion)
     }
 
+    func testCloudLegacyProfileMigrationNeverCreatesLocalBackup() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("companion-state.json")
+        let original = Data("local save must remain untouched".utf8)
+        try original.write(to: url)
+        let store = CompanionStore(fileURL: url, cloudMode: true)
+        var remote = CompanionState()
+        remote.active = MonState(baseID: 1, pathIDs: [1], plannedPathIDs: [1,2,3], stageIndex: 0,
+                                 usedAtStage: 1, rarity: .rare, totalForms: 3)
+        store.restoreCloudRules(growth: 0.5, shop: 1.5)
+        store.replaceCloudState(remote, writable: true)
+        XCTAssertNotNil(store.state.active?.profile)
+        XCTAssertEqual(store.growthDifficulty, 0.5)
+        XCTAssertEqual(store.shopDifficulty, 1.5)
+        XCTAssertEqual(try Data(contentsOf: url), original)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), ["companion-state.json"])
+    }
+
     func testConfigurationRejectsSecretsAndInsecureOrigins() {
         let valid = CloudConfiguration(supabaseURL: URL(string: "https://example.supabase.co")!,
                                       publishableKey: "sb_publishable_example", serviceURL: URL(string: "https://example.vercel.app")!)

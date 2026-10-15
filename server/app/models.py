@@ -128,9 +128,15 @@ class CompanionSave(StrictModel):
         return self
 
 
+class RuleSettings(StrictModel):
+    growthDifficulty: Annotated[float, Field(ge=0.1, le=2)] = 1.0
+    shopDifficulty: Annotated[float, Field(ge=0.1, le=2)] = 1.0
+
+
 class SaveCommand(StrictModel):
     schemaVersion: Literal[1]
     expectedRevision: Annotated[int, Field(ge=0, le=9_000_000_000_000_000)]
     requestID: UUID
     operation: Literal["save"]
     state: CompanionSave
+    rules: RuleSettings = Field(default_factory=RuleSettings)

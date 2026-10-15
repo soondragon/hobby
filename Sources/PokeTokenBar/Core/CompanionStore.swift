@@ -157,6 +157,15 @@ final class CompanionStore {
     var language: AppLanguage { state.language }
     func setLanguage(_ lang: AppLanguage) { guard canModifyCompanion else { return }; state.language = lang; save() }
 
+    /// Remote state already contains credits scaled to these server-validated rules.
+    func restoreCloudRules(growth: Double, shop: Double) {
+        guard cloudMode else { return }
+        growthDifficulty = PokemonBalance.clampDifficulty(growth)
+        shopDifficulty = PokemonBalance.clampDifficulty(shop)
+        defaults.set(growthDifficulty, forKey: "growthDifficulty")
+        defaults.set(shopDifficulty, forKey: "shopDifficulty")
+    }
+
     // MARK: 난이도 — 저장할 때만 적용
 
     /// Keep the earned fraction of this egg/stage. These are progression credits,
@@ -2072,6 +2081,8 @@ final class CompanionStore {
             if before != state.active?.profile { save() }
             return
         }
+
+        if cloudMode { save(); return }
 
         // One recoverable snapshot before the first format expansion. Never overwrite it.
         let backup = fileURL.deletingLastPathComponent()

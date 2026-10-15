@@ -13,6 +13,7 @@ struct CloudUser: Decodable, Sendable {
 final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContextProviding, CloudAuthenticating {
     private let configuration: CloudConfiguration
     private let transport = CloudTransport()
+    private let persistCredentials: Bool
     private var browserSession: ASWebAuthenticationSession?
     private var credential: CloudCredential?
     private var expiresAt = Date.distantPast
@@ -21,7 +22,10 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
     private var refreshTask: Task<CloudCredential, Error>?
     private var generation = UUID()
 
-    init(configuration: CloudConfiguration) { self.configuration = configuration }
+    init(configuration: CloudConfiguration, persistCredentials: Bool = true) {
+        self.configuration = configuration
+        self.persistCredentials = persistCredentials
+    }
     private var vault: CloudCredentialVault { .init(project: configuration.supabaseURL.absoluteString) }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
@@ -59,7 +63,7 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
 
     func restore() async throws {
         let operation = generation
-        guard let previous = try vault.read() else { throw CloudError.authentication }
+        guard persistCredentials, let previous = try vault.read() else { throw CloudError.authentication }
         let value = try await exchange(grant: "refresh_token", body: ["refresh_token": previous.refresh_token])
         guard operation == generation else { throw CancellationError() }
         try await accept(value, operation: operation)
@@ -77,7 +81,7 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
                                                     token: value.access_token, key: configuration.publishableKey)
         guard operation == generation else { throw CancellationError() }
         guard verified.identities.contains(where: { $0.provider == "github" }) else { throw CloudError.authentication }
-        try vault.write(value)
+        if persistCredentials { try vault.write(value) }
         credential = value
         user = verified
         expiresAt = Date().addingTimeInterval(Double(max(0, value.expires_in - 60)))
@@ -100,7 +104,15 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
         return value.access_token
     }
 
-    func signOut() throws {
+    func signOut() async throws {
+        // Revoke only this device's session. Other signed-in devices stay connected.
+        if credential != nil {
+            let token = try await accessToken()
+            var endpoint = URLComponents(url: configuration.supabaseURL.appendingPathComponent("auth/v1/logout"), resolvingAgainstBaseURL: false)!
+            endpoint.queryItems = [.init(name: "scope", value: "local")]
+            let _: CloudEmptyResponse = try await transport.request(CloudEmptyResponse.self, url: endpoint.url!,
+                method: "POST", token: token, key: configuration.publishableKey)
+        }
         generation = UUID()
         browserSession?.cancel()
         browserSession = nil
@@ -109,7 +121,7 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
         credential = nil
         user = nil
         expiresAt = .distantPast
-        try vault.clear()
+        if persistCredentials { try vault.clear() }
     }
 }
 

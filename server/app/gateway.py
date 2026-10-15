@@ -53,6 +53,8 @@ class SupabaseGateway:
                 code = None
             if code in ("PT409", "23505"):
                 raise HTTPException(409, "save_conflict")
+            if code == "PT429":
+                raise HTTPException(429, "growth_rate_limit")
             if code == "PT422":
                 raise HTTPException(422, "invalid_save")
             if response.status_code in (401, 403):
@@ -70,4 +72,5 @@ class SupabaseGateway:
         return await self._rpc(token, "write_trainer_save", {
             "p_expected_revision": command.expectedRevision, "p_request_id": str(command.requestID),
             "p_operation": command.operation, "p_state": command.state.model_dump(mode="json", exclude_none=True),
+            "p_rules": command.rules.model_dump(mode="json"),
         })

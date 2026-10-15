@@ -5,6 +5,21 @@ import SwiftUI
 @MainActor
 enum CloudPreviewBootstrap {
     static func windowIfRequested() -> NSWindow? {
+        if Bundle.main.object(forInfoDictionaryKey: "SecurityAuditOnly") as? Bool == true,
+           let configuration = try? CloudConfiguration.load() {
+            NSApp.setActivationPolicy(.regular)
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 600),
+                                  styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.title = "Trainer Security Audit"
+            let host = NSHostingView(rootView: CloudSecurityAuditView(audit: .init(configuration: configuration)))
+            host.sizingOptions = []
+            window.contentView = host
+            window.isReleasedWhenClosed = false
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return window
+        }
         guard Bundle.main.object(forInfoDictionaryKey: "CloudPreviewOnly") as? Bool == true else { return nil }
         NSApp.setActivationPolicy(.regular)
         let store = CompanionStore(cloudMode: true)

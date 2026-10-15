@@ -1141,3 +1141,15 @@ read_when:
   descriptive aliases. Sweep includes the previously qualified operation-history revision column.
   Regression: `test_real_usage_baseline_shape_and_ledger_limits` plus the normalized write/read
   round-trip now contain a nonempty provider map; both valid and rejected-key branches are checked.
+
+
+## Cloud trust boundaries
+
+- Cloud profile migration must never write a legacy local backup. The migration's unchanged-file
+  branch originally hid the backup branch from cloud startup tests. `CloudPersistenceTests` now
+  restores a profile-less remote individual beside an existing local file and asserts that only
+  that untouched file exists afterward. Search all persistence calls, including migration backups,
+  rather than testing only the primary save function.
+- Growth validation must use the actual repeat multiplier. Assuming a multiplier of two accepted
+  premature graduation for first-time species. Database regression tests reject that exact boundary,
+  while preserving legitimate graduation, paid items, new births, and Ditto profile rebasing.

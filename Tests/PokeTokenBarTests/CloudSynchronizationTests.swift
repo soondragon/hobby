@@ -5,11 +5,12 @@ import XCTest
 @MainActor
 private final class CloudTestAuthentication: CloudAuthenticating {
     var userID: UUID?
+    var rejectSignOut = false
     init(_ owner: UUID) { userID = owner }
     func signIn() async throws {}
     func restore() async throws {}
     func accessToken() async throws -> String { "test-session" }
-    func signOut() throws { userID = nil }
+    func signOut() async throws { if rejectSignOut { throw CloudError.transport }; userID = nil }
 }
 
 private actor CloudTestRepository: CloudSaveServing {
@@ -46,6 +47,24 @@ private actor CloudTestRepository: CloudSaveServing {
 final class CloudSynchronizationTests: XCTestCase {
     private let configuration = CloudConfiguration(supabaseURL: URL(string: "https://example.supabase.co")!,
         publishableKey: "sb_publishable_example", serviceURL: URL(string: "https://example.vercel.app")!)
+
+    func testLogoutReportsFailureUntilServerRevocationSucceeds() async {
+        let owner = UUID()
+        let store = CompanionStore(cloudMode: true)
+        let authentication = CloudTestAuthentication(owner)
+        let controller = CloudCompanionController(store: store, configuration: configuration,
+            authentication: authentication, repository: CloudTestRepository(owner: owner, state: CompanionState()))
+        await controller.connect()
+        authentication.rejectSignOut = true
+        await controller.disconnect()
+        XCTAssertNotNil(controller.alias)
+        XCTAssertNotNil(authentication.userID)
+        authentication.rejectSignOut = false
+        await controller.disconnect()
+        XCTAssertNil(controller.alias)
+        XCTAssertNil(authentication.userID)
+        XCTAssertFalse(store.canModifyCompanion)
+    }
 
     func testLostAcknowledgementRetriesIdenticalCommandWithoutDuplicatingState() async throws {
         let owner = UUID()

@@ -7,6 +7,12 @@ struct CloudSaveEnvelope: Decodable, Sendable {
     let schemaVersion: Int
     let revision: Int
     let state: CompanionState?
+    var rules: CloudRuleSettings? = nil
+}
+
+struct CloudRuleSettings: Codable, Sendable {
+    var growthDifficulty: Double = 1
+    var shopDifficulty: Double = 1
 }
 
 struct CloudSaveCommand: Encodable, Sendable {
@@ -15,6 +21,7 @@ struct CloudSaveCommand: Encodable, Sendable {
     let requestID: UUID
     let operation: String
     let state: CompanionState
+    var rules = CloudRuleSettings()
 }
 
 struct CloudSaveReceipt: Decodable, Sendable {
@@ -47,7 +54,7 @@ final class CloudCompanionController {
          authentication: (any CloudAuthenticating)? = nil, repository: (any CloudSaveServing)? = nil) {
         self.store = store
         self.repository = repository ?? configuration.map(CloudSaveRepository.init)
-        self.authentication = authentication ?? configuration.map(CloudAuthentication.init)
+        self.authentication = authentication ?? configuration.map { CloudAuthentication(configuration: $0) }
         isConfigured = configuration != nil
         if configuration == nil { status = CloudError.configuration.localizedDescription }
         store.onCloudMutation = { [weak self] state in self?.enqueue(state) }
@@ -89,6 +96,10 @@ final class CloudCompanionController {
         ownerID = result.ownerID
         revision = result.revision
         hasRemoteSave = result.state != nil
+        let rules = result.rules ?? CloudRuleSettings()
+        guard rules.growthDifficulty.isFinite, rules.shopDifficulty.isFinite,
+              (0.1...2).contains(rules.growthDifficulty), (0.1...2).contains(rules.shopDifficulty) else { throw CloudError.invalidResponse }
+        store?.restoreCloudRules(growth: rules.growthDifficulty, shop: rules.shopDifficulty)
         if let state = result.state {
             store?.replaceCloudState(state, writable: true)
             status = "서버 세이브 연결됨 · 버전 \(revision)"
@@ -102,7 +113,7 @@ final class CloudCompanionController {
     func initialize() async {
         guard !isBusy, !hasRemoteSave, !hasUnsavedChanges, alias != nil, revision == 0, let store else { return }
         let candidate = CompanionState()
-        inFlight = CloudSaveCommand(expectedRevision: 0, requestID: UUID(), operation: "save", state: candidate)
+        inFlight = CloudSaveCommand(expectedRevision: 0, requestID: UUID(), operation: "save", state: candidate, rules: .init(growthDifficulty: store.growthDifficulty, shopDifficulty: store.shopDifficulty))
         store.replaceCloudState(candidate, writable: false)
         hasUnsavedChanges = true
         await drain(operation: generation)
@@ -131,7 +142,7 @@ final class CloudCompanionController {
             while inFlight != nil || pending != nil {
                 if inFlight == nil, let next = pending {
                     pending = nil
-                    inFlight = .init(expectedRevision: revision, requestID: UUID(), operation: "save", state: next)
+                    inFlight = .init(expectedRevision: revision, requestID: UUID(), operation: "save", state: next, rules: .init(growthDifficulty: store?.growthDifficulty ?? 1, shopDifficulty: store?.shopDifficulty ?? 1))
                 }
                 guard let command = inFlight else { break }
                 guard authentication.userID == ownerID else { throw CloudError.authentication }
@@ -187,14 +198,22 @@ final class CloudCompanionController {
         await reload()
     }
 
-    func disconnect() {
+    func disconnect() async {
         guard !isBusy, !hasUnsavedChanges else { return }
+        isBusy = true
+        defer { isBusy = false }
+        store?.setCloudWritable(false)
+        do { try await authentication?.signOut() }
+        catch {
+            store?.setCloudWritable(hasRemoteSave)
+            status = error.localizedDescription
+            return
+        }
         generation = UUID()
         worker?.cancel(); worker = nil
         store?.replaceCloudState(CompanionState(), writable: false)
         alias = nil; revision = 0; hasRemoteSave = false
         ownerID = nil
-        do { try authentication?.signOut(); status = "로그아웃됨. 서버 데이터는 유지됩니다." }
-        catch { status = error.localizedDescription }
+        status = "로그아웃됨. 서버 데이터는 유지됩니다."
     }
 }

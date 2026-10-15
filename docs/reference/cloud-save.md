@@ -29,7 +29,7 @@ Use one active writer per account; provider usage baselines are currently part o
 
 The original `CompanionState` JSON contained the active individual, collected individuals (`dex`),
 wallet/progression counters, egg state, inventory, provider usage baselines, candy grants, and locale.
-Difficulty settings are device preferences, not part of this document.
+Difficulty settings are stored with the server growth policy and restored together with the save.
 
 | Table | Responsibility |
 | --- | --- |
@@ -48,11 +48,11 @@ integer JSON parser and PostgreSQL JSONB preserve their exact value, including `
 
 ## Security boundaries
 
-- RLS restricts direct reads to the owner. Direct client writes and anonymous RPC execution are revoked.
-- Only the read/write RPCs are intentionally callable by authenticated users. Their security-definer
-  execution is deliberate, with an empty search path and ownership derived inside the function.
-  Supabase's advisor reports these two deliberate grants; audit their bodies before changing grants.
-  See the [authenticated security-definer advisory](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable).
+- Direct table reads and writes are revoked, including owner reads. RLS remains enabled as defense in depth.
+- Public read/write RPCs run as security invoker. Their guarded implementations are in the
+  nonexposed `trainer_internal` schema. Raw snapshot helpers cannot be executed by clients.
+- Both RPCs require the JWT session ID to exist in Auth's sessions table for the same user.
+  Logout revokes only the current device's Supabase session before clearing local credentials.
 - GitHub client secrets live only in Supabase provider configuration. They are absent from source,
   app resources, API environment, and logs. The native bundle contains only public connection settings.
 - Credentials are not placed in query strings or preference files. HTTP redirects carrying bearer
@@ -115,3 +115,45 @@ Manual checks must cover sign-in, session restoration, new server save, reload, 
 ![Server account and persisted save](../evidence/cloud-save/server-save.png)
 
 ![Exact native auth callback configuration](../evidence/cloud-save/auth-configuration.png)
+
+## Growth validation and real account audit (2026-10-15)
+
+The existing local token-log integration is retained by user choice. The database validates token
+ledger deltas, wallet monotonicity, spending, inventory consumption, bounded grants, active individual
+identity, growth/level ceilings, evolution routes, graduation, hatch costs, repeat boosts, and Ditto
+reveal transitions. A private catalog derived from the official PokéAPI species dataset constrains
+newborn rarity and legal evolution paths. Rules are validated in the database even when a caller
+bypasses Vercel and invokes an RPC directly. Request IDs remain idempotent under concurrent retries.
+
+The server limits new reported usage to a 25-million-token burst, refilling 100,000 tokens per second,
+and quota candies to 30 per server day. A legitimate offline usage backlog larger than the burst is
+currently rejected; it is not silently dropped or partially acknowledged. Local token evidence and
+quota reports are self-reported, so a forged but internally consistent report within those limits can
+still pass. Initial hatch RNG, IVs and public species metadata are not server-attested. This is bounded
+validation, not a cheat-proof competitive system. Battle logic remains absent.
+
+Real GitHub accounts `soondragon` and `yongari9292` completed 24 production checks: each read returned
+its own UUID and alias; cross-account reads of all six tables and cross-account PATCH returned 403;
+alias selection returned 400; private schema access returned 406; raw writer lookup returned 404.
+For the account with an existing save, an unbacked growth request returned 422 and its revision stayed
+unchanged. The second account had no save, so its growth-write probe was intentionally skipped.
+No player snapshots or credentials were exported by the diagnostic app.
+
+Local validation: 34 API/PostgreSQL tests and 161 focused native tests passed, including logout failure recovery. Supabase security advisors reported only intentional deny-all private tables
+(INFO) and the existing disabled leaked-password check (WARN). Password login is not used by this
+app; application access additionally requires a GitHub identity. No security setting was weakened.
+
+Deployment status: DB migrations are applied. The API/native updates in this branch still require
+Vercel deployment and an updated local app build. Vercel MCP returned 403 for `yong-35b2`; the existing
+CLI account cannot access that scope. Do not claim that pending API code is deployed.
+
+### End-user login permissions
+
+Users need GitHub authentication only. They never need repository, Vercel administration, Supabase
+administration, or cloud-account permissions. Alias is display-only; authorization uses the stable
+Supabase user UUID. Supabase's built-in GitHub provider always requests `user:email` and reads verified
+email addresses; its current implementation does not support removing that scope by a client option.
+This is an Auth-provider dependency, not a permission required for displaying an alias. Removing email
+access requires replacing that login adapter, not adding repository or deployment permissions.
+
+![Actual two-account access denial](../evidence/cloud-save/two-account-audit.png)
