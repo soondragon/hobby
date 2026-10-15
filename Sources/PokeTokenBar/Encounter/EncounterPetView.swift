@@ -16,7 +16,7 @@ struct EncounterPetView: View {
                 EncounterSpeechBubble(member: member, placeholder: isSelf ? "내 포켓몬 선택" : "상대 연결 대기",
                                       message: ownAttack ? active.map { $0.event.moveName + "!" } : nil)
                 EncounterSprite(pokemon: member?.pokemon, back: isSelf)
-                    .frame(width: isSelf ? 180 : 158, height: 180)
+                    .frame(width: isSelf ? 180 : 146, height: isSelf ? 180 : 146)
                     .offset(x: motion(phase, attacking: ownAttack))
                     .opacity(!ownAttack && phase > 0.7 && phase < 0.94 ? 0.55 + 0.45 * abs(sin(phase * 85)) : 1)
             }

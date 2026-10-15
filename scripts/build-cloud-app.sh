@@ -26,6 +26,7 @@ with open(sys.argv[1], 'wb') as output:
                               'CFBundleURLSchemes': ['hobbytrainer']}],
     }, output)
 PY
+cp -R Sources/PokeTokenBar/Resources/BattleSpells "$TRAINER_APP/Contents/Resources/"
 codesign --force -s - "$TRAINER_APP"
 codesign --verify --strict "$TRAINER_APP"
 echo "$TRAINER_APP"

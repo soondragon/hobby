@@ -1177,3 +1177,5 @@ read_when:
   clearing; production sign-out interaction remains part of the pending real OAuth verification.
 
 - Simultaneous skill speech bubbles initially chose the latest global event, suppressing the other actor's cast name. Select the latest event for that actor first and use incoming events only for hit state. Inspected the actual simultaneous fire/water renderer with both names visible. Historical move imports must apply post-version changelog values per field and skip unsupported null-PP shadow moves; catalog regressions assert Gen V powers and complete standard-move coverage.
+
+- SwiftPM's executable resource accessor checks the app root, whereas installed app assets live under Contents/Resources. Falling through to the iCloud build path blocked native Canvas rendering despite unit tests passing against the build tree. Installed spell sheets now resolve directly from the app resource directory before the test-only module fallback; both packaging scripts copy the same assets. Verify an actual packaged app cast in addition to decoded-frame unit tests.

@@ -8,7 +8,7 @@ struct EncounterSpeechBubble: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(member.map { "@" + $0.alias } ?? placeholder)
                 .font(.system(size: 13, weight: .semibold)).lineLimit(1).truncationMode(.middle)
-            Text(message ?? member?.pokemon?.title ?? "포켓몬 선택 대기")
+            Text(member?.pokemon?.title ?? "포켓몬 선택 대기")
                 .font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(.secondary)
         }
         .foregroundStyle(Color(red: 0.16, green: 0.19, blue: 0.25))
@@ -18,6 +18,13 @@ struct EncounterSpeechBubble: View {
         .overlay(RoundedRectangle(cornerRadius: 17).strokeBorder(Color.black.opacity(0.08)))
         .overlay(alignment: .bottomLeading) {
             BubbleTail().fill(Color.white.opacity(0.97)).frame(width: 15, height: 12).offset(x: 26, y: 10)
+        }
+        .overlay(alignment: .topTrailing) {
+            if let message {
+                Text(message).foregroundStyle(Color(red: 0.16,green: 0.19,blue: 0.25)).font(.system(size: 10,weight: .semibold))
+                    .padding(.horizontal,8).padding(.vertical,4)
+                    .background(.white,in: Capsule()).offset(x: -6,y: -18)
+            }
         }
         .shadow(color: .black.opacity(0.13), radius: 7, y: 3)
     }

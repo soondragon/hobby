@@ -46,8 +46,8 @@ final class DesktopBattleStage {
         guard let frame = NSScreen.main?.visibleFrame else { return }
         state.canvasSize = frame.size
         effects.setFrame(frame, display: true)
-        own.setFrameOrigin(NSPoint(x: frame.minX+48,y: frame.minY+40))
-        opponent.setFrameOrigin(NSPoint(x: frame.maxX-300,y: frame.maxY-330))
+        own.setFrameOrigin(NSPoint(x: frame.midX-225,y: frame.midY-201))
+        opponent.setFrameOrigin(NSPoint(x: frame.midX-5,y: frame.midY-61))
         own.orderFrontRegardless(); opponent.orderFrontRegardless(); effects.orderFrontRegardless()
         updateAnchors()
     }

@@ -20,9 +20,10 @@ enum EncounterPreviewBootstrap {
         controls.isReleasedWhenClosed = false
         let battle = DesktopBattleStage(settings: { controls.makeKeyAndOrderFront(nil) },hide: { stage?.stop() })
         stage = battle
-        let check = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 1000,height: 600),styleMask: [.titled,.closable],backing: .buffered,defer: false)
+        let check = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 450,height: 402),styleMask: [.titled,.closable],backing: .buffered,defer: false)
         check.title = "기술 이펙트 검수 · 실제 렌더링 · 로컬 샘플"
         check.isReleasedWhenClosed = false
+        check.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 3)
         let scene = NSHostingView(rootView: BattleInspectionView(state: battle.state))
         scene.sizingOptions = [];check.contentView = scene;check.center();inspector = check
         let host = NSHostingView(rootView: PreviewSkillControls(model: model,stage: battle,inspect: { check.makeKeyAndOrderFront(nil) }))
@@ -126,20 +127,16 @@ private struct BattleInspectionView: View {
     let state: DesktopBattleState
     var body: some View {
         GeometryReader { geometry in
-            let scale = min(geometry.size.width / state.canvasSize.width,geometry.size.height / state.canvasSize.height)
+            let scale = min(geometry.size.width / 450,geometry.size.height / 402)
             ZStack(alignment: .topLeading) {
-                EncounterPetView(state: state,isSelf: true,settings: {},hide: {})
-                    .position(x: state.ownAnchor.x-35,y: state.ownAnchor.y-5)
-                EncounterPetView(state: state,isSelf: false,settings: {},hide: {})
-                    .position(x: state.opponentAnchor.x+30,y: state.opponentAnchor.y-5)
-                BattleEffects(playbacks: state.playbacks,ownAnchor: state.ownAnchor,opponentAnchor: state.opponentAnchor,frozenProgress: state.frozenProgress)
-                    .frame(width: state.canvasSize.width,height: state.canvasSize.height)
+                EncounterBattleView(members: state.members)
+                BattleEffects(playbacks: state.playbacks,ownAnchor: CGPoint(x: 146,y: 262),opponentAnchor: CGPoint(x: 304,y: 157),frozenProgress: state.frozenProgress)
+                    .frame(width: 450,height: 402)
             }
-            .frame(width: state.canvasSize.width,height: state.canvasSize.height)
+            .frame(width: 450,height: 402)
             .scaleEffect(scale,anchor: .topLeading)
         }
-        .background(LinearGradient(colors: [Color(red: 0.1,green: 0.16,blue: 0.26),Color(red: 0.18,green: 0.27,blue: 0.39)],startPoint: .topLeading,endPoint: .bottomTrailing))
-        .overlay(alignment: .topLeading) { Text("LOCAL RENDER · 실제 기술 데이터 / 연출 검수").font(.caption).foregroundStyle(.white.opacity(0.7)).padding(16) }
+        .background(Color.white)
     }
 }
 #endif

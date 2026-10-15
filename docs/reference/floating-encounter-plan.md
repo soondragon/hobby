@@ -128,3 +128,13 @@ Migration `20261015082301_encounter_skill_events.sql` is applied. Direct catalog
 Production deployment `dpl_8ogJAEfMzaaXA99RPUQacT6cgnYK` is Ready at https://hobby-trainer.vercel.app. `/api/health` and species 6/649 catalogs returned 200; species 650 returned 404; unauthenticated room skills returned 401. Production Flamethrower power was checked as 95. Release build, strict signature verification, installation and account-window startup passed. This remains an ad-hoc local app, not a notarized public release.
 
 ![Production Ready](../evidence/skill-effects/production-ready.png)
+
+## Reference composition and pixel spell sheets
+
+The user-supplied reference is the presentation baseline: large own back sprite at lower left, smaller opposing front sprite at upper right, white rounded speech bubbles with alias/species/level and no battlefield background. Default desktop pets now start near each other at the monitor center and remain independently draggable. The inspection view reuses the original 450-point battle composition on a white inspection backdrop; live panels remain transparent.
+
+The previous procedural gradient beams were replaced with six-frame pixel sheets from DevWizard's *Pixel Art Spells* (CC0, https://opengameart.org/content/pixel-art-spells). Six unchanged PNG sheets and attribution ship in the application. Frame decoding is cached once, with nearest-neighbor drawing; type/class selects projectiles, impacts or shields. These are shared visual categories, not individually authored animations for every move. No server, authentication, ownership or growth behavior changed.
+
+Validation: five focused skill tests passed; actual packaged preview cast, release build, strict installed signature verification and main account-window startup passed. No backend deployment was needed for this presentation-only change.
+
+![Reference composition with pixel skills, actual local sample](../evidence/skill-effects/pixel-reference-render.png)

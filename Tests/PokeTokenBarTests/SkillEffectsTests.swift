@@ -5,6 +5,14 @@ import XCTest
 
 @MainActor
 final class SkillEffectsTests: XCTestCase {
+    func testBundledPixelSheetsDecodeAllFramesWithTransparentCorners() throws {
+        for name in ["fire","water","electric","magic","impact","status"] {
+            let frames = try XCTUnwrap(SkillSpriteSheet.frames[name])
+            XCTAssertEqual(frames.count,6)
+            XCTAssertTrue(frames.allSatisfy { $0.width == $0.height })
+            XCTAssertNotEqual(frames[0].alphaInfo,.none)
+        }
+    }
     private func room(event: EncounterSkillEvent, serverTime: Double) -> EncounterRoom {
         .init(id: UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!,revision: 5,closed: false,
               members: [.init(isSelf: true,alias: "trainer",pokemon: nil)],inviteCode: nil,serverTime: serverTime,events: [event])
