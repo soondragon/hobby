@@ -3,10 +3,28 @@ import SwiftUI
 @MainActor
 struct ProfileEntryView: View {
     @Environment(ProfileWindowController.self) private var controller: ProfileWindowController?
+    @Environment(CompanionStore.self) private var companion: CompanionStore?
+    @State private var showingCloud = false
     let language: AppLanguage
 
     var body: some View {
-        if let controller {
+        if let cloud = companion?.cloudController {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(cloud.alias ?? "GitHub 클라우드 세이브", systemImage: "icloud")
+                        .font(.callout.weight(.semibold))
+                    Text(cloud.status).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                }
+                Spacer()
+                Button("관리") { showingCloud = true }.controlSize(.small)
+            }
+            .sheet(isPresented: $showingCloud) {
+                VStack {
+                    CloudAccountView(controller: cloud)
+                    Button("닫기") { showingCloud = false }.padding(.bottom)
+                }
+            }
+        } else if let controller {
             HStack(spacing: 8) {
                 Image(systemName: "person.crop.circle")
                 VStack(alignment: .leading, spacing: 2) {

@@ -42,6 +42,50 @@ final class CompanionStore {
     private let detailProvider: (any PokemonDetailProviding)?
     private let clock: () -> Date
     private let fileURL: URL
+    let cloudMode: Bool
+    private(set) var cloudWritable = false
+    var onCloudMutation: ((CompanionState) -> Void)?
+    var cloudController: CloudCompanionController?
+    var canModifyCompanion: Bool { !cloudMode || cloudWritable }
+
+    func setCloudWritable(_ value: Bool) {
+        guard cloudMode else { return }
+        if !value {
+            activeGeneration += 1
+            isHatching = false
+            isRevealingDitto = false
+            prefetchInFlight = false
+        }
+        cloudWritable = value
+    }
+
+    func replaceCloudState(_ incoming: CompanionState, writable: Bool) {
+        guard cloudMode else { return }
+        activeGeneration += 1
+        cloudWritable = writable
+        state = SaveTransfer.sanitized(incoming)
+        currentLine = nil
+        prefetchedLineID = nil
+        prefetchInFlight = false
+        isHatching = false
+        isRevealingDitto = false
+        justEvolvedTo = nil
+        justGraduated = nil
+        eventUntil = nil
+        celebration = nil
+        candyFeedbackAmount = 0
+        mintFeedbackNature = nil
+        pokemonDetailsByID = [:]
+        loadingPokemonDetailIDs = []
+        failedPokemonDetailIDs = []
+        isHatchRetryDelayed = false
+        refreshRepresentativeSubject()
+        displayState = state.active == nil ? .egg : .idle
+        if writable {
+            migratePokemonProfilesIfNeeded()
+            if state.active != nil { Task { await loadCurrentLine() } }
+        }
+    }
     private var rng: any RandomNumberGenerator
     private let dittoDisguiseRollingEnabled: Bool
     private(set) var pokemonDetailsByID: [Int: PokemonDetails] = [:]
@@ -69,6 +113,7 @@ final class CompanionStore {
          detailProvider: (any PokemonDetailProviding)? = nil,
          clock: @escaping () -> Date = Date.init,
          fileURL: URL? = nil,
+         cloudMode: Bool = false,
          rng: any RandomNumberGenerator = SystemRandomNumberGenerator(),
          dittoDisguiseRollingEnabled: Bool = AppEnv.isBundledApp,
          defaults: UserDefaults = .standard) {
@@ -76,6 +121,7 @@ final class CompanionStore {
         self.detailProvider = detailProvider ?? (provider as? any PokemonDetailProviding)
         self.clock = clock
         self.fileURL = fileURL ?? Self.defaultURL()
+        self.cloudMode = cloudMode
         self.rng = rng
         self.dittoDisguiseRollingEnabled = dittoDisguiseRollingEnabled
         self.defaults = defaults
@@ -86,8 +132,8 @@ final class CompanionStore {
         growthDifficulty = PokemonBalance.clampDifficulty(storedGrowth)
         shopDifficulty = PokemonBalance.clampDifficulty(
             defaults.object(forKey: "shopDifficulty") as? Double ?? PokemonBalance.defaultDifficulty)
-        load()
-        if previousGrowth != growthDifficulty {
+        if !cloudMode { load() }
+        if !cloudMode && previousGrowth != growthDifficulty {
             rescaleBankedGrowth(from: previousGrowth, to: growthDifficulty)
             save()
         }
@@ -109,13 +155,14 @@ final class CompanionStore {
     // MARK: 파생값 (UI)
 
     var language: AppLanguage { state.language }
-    func setLanguage(_ lang: AppLanguage) { state.language = lang; save() }
+    func setLanguage(_ lang: AppLanguage) { guard canModifyCompanion else { return }; state.language = lang; save() }
 
     // MARK: 난이도 — 저장할 때만 적용
 
     /// Keep the earned fraction of this egg/stage. These are progression credits,
     /// not actual usage: lifetime tokens, provider ledgers and wallet never change here.
     func setGrowthDifficulty(_ value: Double) {
+        guard canModifyCompanion else { return }
         let clamped = PokemonBalance.clampDifficulty(value)
         guard clamped != growthDifficulty else { return }
         rescaleBankedGrowth(from: growthDifficulty, to: clamped)
@@ -220,6 +267,7 @@ final class CompanionStore {
     /// 불변식을 지키며, 실패한 요청이 기존 선택을 조용히 해제하지 않도록 false 만 반환한다.
     @discardableResult
     func setRepresentativeSpeciesID(_ id: Int?, unownForm: UnownForm? = nil) -> Bool {
+        guard canModifyCompanion else { return false }
         if let id, !state.ownsSpecies(id, unownForm: unownForm) { return false }
         state.representativeSpeciesID = id
         state.representativeUnownForm = UnownForm.resolved(speciesID: id ?? 0, form: unownForm)
@@ -709,6 +757,7 @@ final class CompanionStore {
     /// 라인 조회는 `PokeAPIClient` 가 base 단위로 캐시하므로 같은 라인이 여러 항목이어도 네트워크는 1회.
     /// 오프라인이면 `dexResolveChainNames` 가 저장 없이 폴백만 돌려주므로 다음 진입에서 다시 시도한다.
     func backfillMissingDexNames() async {
+        guard canModifyCompanion else { return }
         for entry in state.dex where entry.needsNamesRefresh {
             _ = await dexResolveChainNames(entry)   // 성공분만 내부에서 state.dex 에 저장
         }
@@ -734,6 +783,7 @@ final class CompanionStore {
     }
 
     func dexResolveChainNames(_ entry: DexEntry) async -> [Int: String] {
+        let generation = activeGeneration
         // Another row of this evolution line may already have refreshed the stored entry.
         let entry = state.dex.first { $0.id == entry.id } ?? entry
         if !entry.needsNamesRefresh, let stored = dexStoredChainNames(entry) { return stored }
@@ -741,6 +791,7 @@ final class CompanionStore {
         guard let line = try? await dexNameLine(baseID: entry.baseID) else {
             return Dictionary(uniqueKeysWithValues: entry.chainOrder.map { ($0, oldNames[$0] ?? "#\($0)") })
         }
+        guard canModifyCompanion, generation == activeGeneration else { return oldNames }
         // Preserve usable older names if a response is partial. Only a complete chain gets
         // the new version, so partial/offline responses remain eligible for retry.
         func refreshed(_ original: DexEntry) -> DexEntry {
@@ -773,6 +824,7 @@ final class CompanionStore {
 
     func update(todayTokensByProvider: [String: Int], todayDate: String, monthTotal: Int,
                 burnTier: BurnTier, limitWarning: Bool, hasUsageData: Bool) {
+        guard canModifyCompanion else { return }
         let todayTokens = todayTokensByProvider.values.reduce(0, +)
         // `hasUsageData`는 표시용 snapshot 존재 여부이고, 이 map은 오늘 날짜가 확인된
         // provider 데이터만 담는다. stale snapshot이나 today == nil carrier만 있는 refresh는
@@ -902,6 +954,7 @@ final class CompanionStore {
     /// 라인 미로딩(재시작 직후·오프라인)이어도 사용량은 항상 적립한다 — 여기서 드롭하면
     /// 프로바이더별 ledger 는 이미 전진해 델타가 영구 유실된다. 진화 판정만 라인 로드 후로 미룬다.
     func applyUsage(_ delta: Int) {
+        guard canModifyCompanion else { return }
         guard state.active != nil else { return }
         state.active!.usedAtStage += delta
         reconcileActiveProfileGrowth()
@@ -1125,6 +1178,7 @@ final class CompanionStore {
     /// 사탕 XP 는 usedAtStage(진화 진행)에만 반영 — usedSinceInstall/오늘 토큰(실사용 통계)엔 안 잡힌다.
     @discardableResult
     func useRareCandy(count: Int = 1) -> CandyUseResult {
+        guard canModifyCompanion else { return .unavailable }
         guard let preview = planRareCandyUse(count: count) else { return .unavailable }
         var consumed = preview.count
         if let mon = state.active, mon.dittoDisguise != nil && !mon.dittoRevealed {
@@ -1156,6 +1210,7 @@ final class CompanionStore {
     /// 종·usedAtStage·통계 전부 무관(순수 코스메틱). 사용 불가면 nil(무소모). 바뀐 성격을 반환(피드백용).
     @discardableResult
     func useMint() -> PokemonNature? {
+        guard canModifyCompanion else { return nil }
         guard canUseMint, state.active != nil else { return nil }
         let cur = state.active!.nature
         let pool = PokemonNature.allCases.filter { $0 != cur }   // cur=nil(구버전 개체)이면 25종 전체
@@ -1234,6 +1289,7 @@ final class CompanionStore {
     /// 진화 진행엔 무영향(지출 원장만 증가). 잔액 부족/미판매/범위 밖 개수면 부분 구매 없이 no-op(false).
     @discardableResult
     func buy(_ kind: ItemKind, count: Int = 1) -> Bool {
+        guard canModifyCompanion else { return false }
         guard count >= 1, count <= maxBuyCount(kind), let price = price(of: kind) else { return false }
         state.spentTokens += price * count
         state.inventory[kind.rawValue, default: 0] += count
@@ -1274,6 +1330,7 @@ final class CompanionStore {
     /// 상태(`eggTier`)에 적고, 실제 롤은 프리패치/부화 경로가 그 보증을 읽어 수행한다.
     @discardableResult
     func buyEgg(_ tier: Rarity?) -> Bool {
+        guard canModifyCompanion else { return false }
         guard canBuyEgg(tier) else { return false }
         state.spentTokens += price(of: .egg(tier))
         if let a = state.active {
@@ -1337,6 +1394,7 @@ final class CompanionStore {
     /// - 첫 실행: 현재 100% 창을 지급 없이 tier 시드만 → 이후 "새로 넘어서는" 순간부터 지급(소급 차단).
     /// - limitsReady=false(한도 미로딩)면 시드/지급 모두 대기(다음 refresh 에 재시도).
     func grantCandies(from windows: [CandyWindow], limitsReady: Bool) {
+        guard canModifyCompanion else { return }
         guard limitsReady else { return }
         if !state.candyFeatureSeeded {
             // 한계(수용): 첫 refresh 에 한 프로바이더 한도만 로드되면 그 프로바이더 창만 시드된다.
@@ -1393,6 +1451,7 @@ final class CompanionStore {
     // MARK: 부화
 
     func hatchIfNeeded() async {
+        guard canModifyCompanion else { return }
         guard state.active == nil, !isHatching, state.eggUsage >= eggHatchThreshold else { return }
         // 프리패치가 "종 롤 중"(pending 미확정)일 때만 대기 — 이중 rng 소비 방지.
         // pending 확정 후의 예열(라인/스프라이트)과는 동시 진행해도 안전하다.
@@ -1403,7 +1462,7 @@ final class CompanionStore {
         // 여기서 소유한 락 하나로 롤·부화가 원자적으로 보호된다.
         let generation = activeGeneration
         isHatching = true
-        defer { isHatching = false }
+        defer { if !cloudMode || activeGeneration == generation { isHatching = false } }
         // 프리패칭된 종이 있으면 그대로 사용(라인·스프라이트 예열됨 → 딜레이 ~0), 없으면 지금 롤.
         let base: Int?
         if let pending = state.pendingHatchID {
@@ -1452,6 +1511,7 @@ final class CompanionStore {
     }
 
     private func finishEggPrefetch(generation: Int, shouldHatch: Bool) {
+        guard !cloudMode || activeGeneration == generation else { return }
         prefetchInFlight = false
         guard shouldHatch, isCurrentReadyEgg(generation: generation) else { return }
         Task { await self.hatchIfNeeded() }
@@ -1461,6 +1521,7 @@ final class CompanionStore {
     /// fetch(provider 캐시 적재) ③ 스프라이트 예열(정적+애니메이션+shiny 애니메이션).
     /// 전부 성공하면 부화 순간 네트워크 0. 실패 지점부터 다음 update 틱에 이어서 재시도.
     private func ensureEggPrefetch() async {
+        guard canModifyCompanion else { return }
         guard state.active == nil, !isHatching, !prefetchInFlight else { return }
         let generation = activeGeneration
         var shouldHatch = false
@@ -1513,10 +1574,11 @@ final class CompanionStore {
     }
 
     func hatch(baseID: Int) async {
+        guard canModifyCompanion else { return }
         guard !isHatching else { return }
         let generation = activeGeneration
         isHatching = true
-        defer { isHatching = false }
+        defer { if !cloudMode || activeGeneration == generation { isHatching = false } }
         await hatchCore(baseID: baseID, generation: generation)
     }
 
@@ -1624,12 +1686,13 @@ final class CompanionStore {
     /// 위장 → 리빌: 진화 못 하는 메타몽이 "첫 진화 임계"에서 진화 대신 정체를 드러내는 순간.
     /// Ditto 라인 로드 후 상태 변환(rare·단일형태·초과분 이월, isShiny/nature 유지) + 연출·알림.
     private func revealDitto() async {
+        guard canModifyCompanion else { return }
         guard let a = state.active, a.dittoDisguise != nil, !a.dittoRevealed, !isRevealingDitto else { return }
         let generation = activeGeneration
         let firstEvoThr = stageThreshold(for: a)
         guard a.usedAtStage >= firstEvoThr else { return }   // 임계 미달 방어
         isRevealingDitto = true
-        defer { isRevealingDitto = false }
+        defer { if !cloudMode || activeGeneration == generation { isRevealingDitto = false } }
         guard let dittoLine = try? await provider.line(baseSpeciesID: PokemonOdds.dittoSpeciesID) else {
             AppLog.write("ditto reveal: line fetch failed — retry next tick"); return
         }
@@ -1675,10 +1738,11 @@ final class CompanionStore {
     }
 
     private func loadCurrentLine() async {
+        guard canModifyCompanion else { return }
         guard let a = state.active, currentLine == nil, !isHatching else { return }
         let generation = activeGeneration
         isHatching = true
-        defer { isHatching = false }
+        defer { if !cloudMode || activeGeneration == generation { isHatching = false } }
         if let line = try? await provider.line(baseSpeciesID: a.baseID) {
             // await 중 사용량·민트 등 활성 상태는 계속 바뀔 수 있다. 요청 당시 스냅샷을 다시 쓰지 말고
             // 같은 개체가 아직 활성인 경우에만 최신 상태를 정규화한다.
@@ -1779,7 +1843,8 @@ final class CompanionStore {
 
     /// 내보내기 페이로드. 파일 쓰기는 호출자(UI)가 사용자가 고른 위치에 수행한다.
     func exportedSaveData(appVersion: String, deviceName: String) throws -> Data {
-        try SaveTransfer.encode(state: state, appVersion: appVersion, deviceName: deviceName, now: clock())
+        guard !cloudMode else { throw CloudError.locked }
+        return try SaveTransfer.encode(state: state, appVersion: appVersion, deviceName: deviceName, now: clock())
     }
 
     /// 검증된 세이브를 이 기기에 적용 — 기존 상태 백업 → 기기 기준 재정렬 → 저장 → 라인 재로딩.
@@ -1787,6 +1852,7 @@ final class CompanionStore {
     /// 그 약속을 못 지키는 채로 덮어쓰면 사용자는 되돌릴 수단 없이 진행을 잃는다.
     func applySave(_ envelope: SaveEnvelope, todayTokensByProvider: [String: Int], todayDate: String,
                    hasUsageData: Bool) throws {
+        guard !cloudMode else { throw CloudError.locked }
         try backupStateBeforeImport()
         state = SaveTransfer.rebasedForThisDevice(envelope.state,
                                                   current: state,
@@ -1846,11 +1912,13 @@ final class CompanionStore {
     // MARK: 스냅샷 (로컬 자동 백업 & 복원)
 
     func refreshSnapshots() {
+        guard !cloudMode else { availableSnapshots = []; return }
         availableSnapshots = SaveSnapshotManager.listSnapshots(for: fileURL)
     }
 
     @discardableResult
     func createManualSnapshot(now: Date? = nil) throws -> SaveSnapshot {
+        guard !cloudMode else { throw CloudError.locked }
         let timestamp = now ?? clock()
         let snapshot = try SaveSnapshotManager.createSnapshot(
             state: state,
@@ -1869,6 +1937,7 @@ final class CompanionStore {
     }
 
     func autoSnapshotIfNeeded(now: Date? = nil) {
+        guard !cloudMode else { return }
         let timestamp = now ?? clock()
         let newest = availableSnapshots.first
 
@@ -1889,6 +1958,7 @@ final class CompanionStore {
         todayDate: String = "",
         hasUsageData: Bool = false
     ) throws {
+        guard !cloudMode else { throw CloudError.locked }
         // Read and validate the selected snapshot before taking the safety snapshot: at the retention
         // limit, that extra file prunes the oldest one, which may be the snapshot being restored.
         // A snapshot that no longer decodes also fails here, before anything is written or pruned.
@@ -1941,6 +2011,7 @@ final class CompanionStore {
     }
 
     private func enrichProfiles(for speciesID: Int, with details: PokemonDetails) {
+        guard canModifyCompanion else { return }
         var changed = false
         if var active = state.active, active.currentID == speciesID, var profile = active.profile {
             let before = profile
@@ -1966,6 +2037,7 @@ final class CompanionStore {
     /// Additive migration for pre-profile saves. It never needs network and therefore cannot block launch.
     /// Deferred fields (gender/ability/moves) are filled after the cached/detail fetch succeeds.
     private func migratePokemonProfilesIfNeeded() {
+        guard canModifyCompanion else { return }
         var changed = false
         if var active = state.active, active.profile == nil {
             let key = "active:\(active.baseID):\(active.pathIDs.map(String.init).joined(separator: ",")):\(state.lastDate)"
@@ -2071,7 +2143,9 @@ final class CompanionStore {
         state = SaveTransfer.sanitized(s)
     }
     private func save() {
+        guard canModifyCompanion else { return }
         refreshRepresentativeSubject()
+        if cloudMode { onCloudMutation?(state); return }
         guard let data = try? JSONEncoder().encode(state) else { return }
         try? data.write(to: fileURL, options: .atomic)   // 부분 쓰기 손상 방지(펫 상태)
     }

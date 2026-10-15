@@ -32,6 +32,7 @@ echo "   archs: $(lipo -archs "$APP/Contents/MacOS/$APP_NAME")"
 # 심볼 strip — 릴리스 바이너리 1.84MB → 0.80MB(-57%). codesign 전에 수행(서명 무효화 방지).
 strip -rSTx "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null || strip -rSx "$APP/Contents/MacOS/$APP_NAME"
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp config/TrainerCloud.json "$APP/Contents/Resources/TrainerCloud.json"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -48,6 +49,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
+    <key>CFBundleURLTypes</key><array><dict>
+        <key>CFBundleURLName</key><string>Trainer cloud authentication</string>
+        <key>CFBundleURLSchemes</key><array><string>hobbytrainer</string></array>
+    </dict></array>
 </dict>
 </plist>
 PLIST

@@ -76,7 +76,7 @@ struct SettingsView: View {
                         floatingPetGroup(store)
                         notificationsGroup(store)
                         updateGroup(store)
-                        transferGroup(store)
+                        if !companion.cloudMode { transferGroup(store) }
                         advancedGroup(store)
                             .id("advancedSettingsSection")
                         aboutSupportGroup

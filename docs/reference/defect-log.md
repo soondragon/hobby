@@ -1117,3 +1117,20 @@ read_when:
   자동 업데이트 시 앱 종료를 기다릴 때 `pgrep -x PokeTokenBar`를 쓰면, 중복 인스턴스가 살아있는 동안 루프를
   결코 빠져나오지 못하고 20초 타임아웃을 온전히 소모한다(#175). `ProcessInfo.processInfo.processIdentifier`로
   종료 대상 프로세스 PID를 전달하고 `kill -0 "$3"`로 특정 프로세스의 종료를 대기한다.
+
+## Native authentication callbacks
+
+- `ASWebAuthenticationSession` completion may arrive on a background XPC queue. A closure
+  inferred as `@MainActor` traps under Swift 6 before it can resume the continuation. Build-only
+  and mocked HTTP tests missed the real OS callback. `CloudBrowserCompletion` supplies an
+  explicitly sendable, nonisolated callback and protects its continuation with a one-shot lock.
+  Sweep: this is the only authentication-session callback in the source tree. Regression:
+  `testAuthenticationCallbackCanResumeFromBackgroundXPCQueueExactlyOnce` invokes the actual
+  callback adapter on a global queue, then delivers a late cancellation. Verify real sign-in as
+  well as this test after changing native authentication.
+
+- The account preview also exposed a macOS 26 display-cycle exception in
+  `NSHostingView.updateAnimatedWindowSize` after authentication changed the view's intrinsic size.
+  The account panel now has a fixed frame and the native account host disables intrinsic sizing.
+  Verify the actual loading-to-profile and profile-to-signed-out transitions after layout changes;
+  a callback/HTTP test alone cannot validate AppKit's window layout cycle.

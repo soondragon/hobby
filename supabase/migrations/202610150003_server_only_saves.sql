@@ -1,0 +1,129 @@
+-- Server-only account saves; no local-file import operation.
+create or replace function public.validate_trainer_save(s jsonb) returns void
+language plpgsql immutable set search_path = '' as $$
+declare k text; v jsonb; e jsonb; n numeric;
+begin
+  if s is null or jsonb_typeof(s) <> 'object' or octet_length(s::text) > 1048576 then
+    raise sqlstate 'PT422' using message = 'invalid_save';
+  end if;
+  if not public.trainer_json_matches(s,$schema${"$defs":{"ActivePokemon":{"additionalProperties":false,"properties":{"baseID":{"maximum":649,"minimum":1,"title":"Baseid","type":"integer"},"pathIDs":{"items":{"maximum":649,"minimum":1,"type":"integer"},"maxItems":10,"minItems":1,"title":"Pathids","type":"array"},"plannedPathIDs":{"items":{"maximum":649,"minimum":1,"type":"integer"},"maxItems":10,"minItems":1,"title":"Plannedpathids","type":"array"},"stageIndex":{"maximum":9,"minimum":0,"title":"Stageindex","type":"integer"},"usedAtStage":{"maximum":9000000000000000,"minimum":0,"title":"Usedatstage","type":"integer"},"rarity":{"enum":["common","uncommon","rare","legendary"],"title":"Rarity","type":"string"},"totalForms":{"maximum":10,"minimum":1,"title":"Totalforms","type":"integer"},"isShiny":{"default":false,"title":"Isshiny","type":"boolean"},"nature":{"anyOf":[{"maxLength":32,"type":"string"},{"type":"null"}],"default":null,"title":"Nature"},"unownForm":{"anyOf":[{"maxLength":12,"type":"string"},{"type":"null"}],"default":null,"title":"Unownform"},"profile":{"anyOf":[{"$ref":"#/$defs/IndividualProfile"},{"type":"null"}],"default":null},"hasGrowthBoost":{"default":false,"title":"Hasgrowthboost","type":"boolean"},"dittoDisguise":{"anyOf":[{"maximum":649,"minimum":1,"type":"integer"},{"type":"null"}],"default":null,"title":"Dittodisguise"},"dittoRevealed":{"default":false,"title":"Dittorevealed","type":"boolean"}},"required":["baseID","pathIDs","plannedPathIDs","stageIndex","usedAtStage","rarity","totalForms"],"title":"ActivePokemon","type":"object"},"CollectionEntry":{"additionalProperties":false,"properties":{"id":{"maxLength":128,"minLength":1,"pattern":"^[A-Za-z0-9_-]+$","title":"Id","type":"string"},"baseID":{"maximum":649,"minimum":1,"title":"Baseid","type":"integer"},"finalID":{"maximum":649,"minimum":1,"title":"Finalid","type":"integer"},"chainOrder":{"items":{"maximum":649,"minimum":1,"type":"integer"},"maxItems":10,"minItems":1,"title":"Chainorder","type":"array"},"rarity":{"enum":["common","uncommon","rare","legendary"],"title":"Rarity","type":"string"},"caughtAt":{"anyOf":[{"anyOf":[{"type":"integer"},{"type":"number"}],"ge":-10000000000.0,"le":100000000000.0},{"type":"null"}],"default":null,"title":"Caughtat"},"isShiny":{"default":false,"title":"Isshiny","type":"boolean"},"nature":{"anyOf":[{"maxLength":32,"type":"string"},{"type":"null"}],"default":null,"title":"Nature"},"unownForm":{"anyOf":[{"maxLength":12,"type":"string"},{"type":"null"}],"default":null,"title":"Unownform"},"profile":{"anyOf":[{"$ref":"#/$defs/IndividualProfile"},{"type":"null"}],"default":null},"names":{"anyOf":[{"additionalProperties":{"additionalProperties":{"type":"string"},"type":"object"},"type":"object"},{"type":"null"}],"default":null,"title":"Names"},"namesVersion":{"anyOf":[{"maximum":100,"minimum":0,"type":"integer"},{"type":"null"}],"default":null,"title":"Namesversion"},"releasedAt":{"anyOf":[{"anyOf":[{"type":"integer"},{"type":"number"}],"ge":-10000000000.0,"le":100000000000.0},{"type":"null"}],"default":null,"title":"Releasedat"}},"required":["id","baseID","finalID","chainOrder","rarity"],"title":"CollectionEntry","type":"object"},"IndividualProfile":{"additionalProperties":false,"properties":{"instanceID":{"maxLength":128,"minLength":1,"pattern":"^[A-Za-z0-9_-]+$","title":"Instanceid","type":"string"},"seed":{"maximum":18446744073709551615,"minimum":0,"title":"Seed","type":"integer"},"gender":{"anyOf":[{"enum":["male","female","genderless"],"type":"string"},{"type":"null"}],"default":null,"title":"Gender"},"ivs":{"$ref":"#/$defs/IndividualValues"},"abilitySlot":{"anyOf":[{"maximum":3,"minimum":1,"type":"integer"},{"type":"null"}],"default":null,"title":"Abilityslot"},"abilityName":{"anyOf":[{"maxLength":100,"pattern":"^[a-z0-9-]+$","type":"string"},{"type":"null"}],"default":null,"title":"Abilityname"},"abilityIsHidden":{"title":"Abilityishidden","type":"boolean"},"level":{"maximum":100,"minimum":1,"title":"Level","type":"integer"},"growthTokens":{"maximum":9000000000000000,"minimum":0,"title":"Growthtokens","type":"integer"},"moves":{"items":{"$ref":"#/$defs/KnownMove"},"maxItems":100,"title":"Moves","type":"array"}},"required":["instanceID","seed","ivs","abilityIsHidden","level","growthTokens","moves"],"title":"IndividualProfile","type":"object"},"IndividualValues":{"additionalProperties":false,"properties":{"hp":{"maximum":31,"minimum":0,"title":"Hp","type":"integer"},"attack":{"maximum":31,"minimum":0,"title":"Attack","type":"integer"},"defense":{"maximum":31,"minimum":0,"title":"Defense","type":"integer"},"specialAttack":{"maximum":31,"minimum":0,"title":"Specialattack","type":"integer"},"specialDefense":{"maximum":31,"minimum":0,"title":"Specialdefense","type":"integer"},"speed":{"maximum":31,"minimum":0,"title":"Speed","type":"integer"}},"required":["hp","attack","defense","specialAttack","specialDefense","speed"],"title":"IndividualValues","type":"object"},"KnownMove":{"additionalProperties":false,"properties":{"name":{"maxLength":100,"minLength":1,"pattern":"^[a-z0-9-]+$","title":"Name","type":"string"},"learnedAtLevel":{"maximum":100,"minimum":0,"title":"Learnedatlevel","type":"integer"}},"required":["name","learnedAtLevel"],"title":"KnownMove","type":"object"}},"additionalProperties":false,"properties":{"installBaselineSet":{"default":false,"title":"Installbaselineset","type":"boolean"},"usedSinceInstall":{"default":0,"maximum":9000000000000000,"minimum":0,"title":"Usedsinceinstall","type":"integer"},"spentTokens":{"default":0,"maximum":9000000000000000,"minimum":0,"title":"Spenttokens","type":"integer"},"eggUsage":{"default":0,"maximum":9000000000000000,"minimum":0,"title":"Eggusage","type":"integer"},"eggTier":{"anyOf":[{"enum":["common","uncommon","rare","legendary"],"type":"string"},{"type":"null"}],"default":null,"title":"Eggtier"},"pendingHatchID":{"anyOf":[{"maximum":649,"minimum":1,"type":"integer"},{"type":"null"}],"default":null,"title":"Pendinghatchid"},"pendingUnownForm":{"anyOf":[{"maxLength":12,"type":"string"},{"type":"null"}],"default":null,"title":"Pendingunownform"},"claimedTodayTokensByProvider":{"anyOf":[{"additionalProperties":{"maximum":9000000000000000,"minimum":0,"type":"integer"},"type":"object"},{"type":"null"}],"default":null,"title":"Claimedtodaytokensbyprovider"},"lastDate":{"default":"","maxLength":10,"pattern":"^(?:|\\d{4}-\\d{2}-\\d{2})$","title":"Lastdate","type":"string"},"active":{"anyOf":[{"$ref":"#/$defs/ActivePokemon"},{"type":"null"}],"default":null},"representativeSpeciesID":{"anyOf":[{"maximum":649,"minimum":1,"type":"integer"},{"type":"null"}],"default":null,"title":"Representativespeciesid"},"representativeUnownForm":{"anyOf":[{"maxLength":12,"type":"string"},{"type":"null"}],"default":null,"title":"Representativeunownform"},"dex":{"items":{"$ref":"#/$defs/CollectionEntry"},"maxItems":10000,"title":"Dex","type":"array"},"collectedFinals":{"items":{"type":"string"},"maxItems":10000,"title":"Collectedfinals","type":"array"},"language":{"default":"en","enum":["ko","en","ja","es","fr","pt","de","ru"],"title":"Language","type":"string"},"inventory":{"additionalProperties":{"maximum":1000000,"minimum":0,"type":"integer"},"propertyNames":{"enum":["rareCandy","mint","shinyCharm"]},"title":"Inventory","type":"object"},"candyGrantTier":{"additionalProperties":{"maximum":1000000,"minimum":0,"type":"integer"},"title":"Candygranttier","type":"object"},"candyWindowEpoch":{"additionalProperties":{"type":"string"},"title":"Candywindowepoch","type":"object"},"candyFeatureSeeded":{"default":false,"title":"Candyfeatureseeded","type":"boolean"}},"title":"CompanionSave","type":"object"}$schema$::jsonb,$schema${"$defs":{"ActivePokemon":{"additionalProperties":false,"properties":{"baseID":{"maximum":649,"minimum":1,"title":"Baseid","type":"integer"},"pathIDs":{"items":{"maximum":649,"minimum":1,"type":"integer"},"maxItems":10,"minItems":1,"title":"Pathids","type":"array"},"plannedPathIDs":{"items":{"maximum":649,"minimum":1,"type":"integer"},"maxItems":10,"minItems":1,"title":"Plannedpathids","type":"array"},"stageIndex":{"maximum":9,"minimum":0,"title":"Stageindex","type":"integer"},"usedAtStage":{"maximum":9000000000000000,"minimum":0,"title":"Usedatstage","type":"integer"},"rarity":{"enum":["common","uncommon","rare","legendary"],"title":"Rarity","type":"string"},"totalForms":{"maximum":10,"minimum":1,"title":"Totalforms","type":"integer"},"isShiny":{"default":false,"title":"Isshiny","type":"boolean"},"nature":{"anyOf":[{"maxLength":32,"type":"string"},{"type":"null"}],"default":null,"title":"Nature"},"unownForm":{"anyOf":[{"maxLength":12,"type":"string"},{"type":"null"}],"default":null,"title":"Unownform"},"profile":{"anyOf":[{"$ref":"#/$defs/IndividualProfile"},{"type":"null"}],"default":null},"hasGrowthBoost":{"default":false,"title":"Hasgrowthboost","type":"boolean"},"dittoDisguise":{"anyOf":[{"maximum":649,"minimum":1,"type":"integer"},{"type":"null"}],"default":null,"title":"Dittodisguise"},"dittoRevealed":{"default":false,"title":"Dittorevealed","type":"boolean"}},"required":["baseID","pathIDs","plannedPathIDs","stageIndex","usedAtStage","rarity","totalForms"],"title":"ActivePokemon","type":"object"},"CollectionEntry":{"additionalProperties":false,"properties":{"id":{"maxLength":128,"minLength":1,"pattern":"^[A-Za-z0-9_-]+$","title":"Id","type":"string"},"baseID":{"maximum":649,"minimum":1,"title":"Baseid","type":"integer"},"finalID":{"maximum":649,"minimum":1,"title":"Finalid","type":"integer"},"chainOrder":{"items":{"maximum":649,"minimum":1,"type":"integer"},"maxItems":10,"minItems":1,"title":"Chainorder","type":"array"},"rarity":{"enum":["common","uncommon","rare","legendary"],"title":"Rarity","type":"string"},"caughtAt":{"anyOf":[{"anyOf":[{"type":"integer"},{"type":"number"}],"ge":-10000000000.0,"le":100000000000.0},{"type":"null"}],"default":null,"title":"Caughtat"},"isShiny":{"default":false,"title":"Isshiny","type":"boolean"},"nature":{"anyOf":[{"maxLength":32,"type":"string"},{"type":"null"}],"default":null,"title":"Nature"},"unownForm":{"anyOf":[{"maxLength":12,"type":"string"},{"type":"null"}],"default":null,"title":"Unownform"},"profile":{"anyOf":[{"$ref":"#/$defs/IndividualProfile"},{"type":"null"}],"default":null},"names":{"anyOf":[{"additionalProperties":{"additionalProperties":{"type":"string"},"type":"object"},"type":"object"},{"type":"null"}],"default":null,"title":"Names"},"namesVersion":{"anyOf":[{"maximum":100,"minimum":0,"type":"integer"},{"type":"null"}],"default":null,"title":"Namesversion"},"releasedAt":{"anyOf":[{"anyOf":[{"type":"integer"},{"type":"number"}],"ge":-10000000000.0,"le":100000000000.0},{"type":"null"}],"default":null,"title":"Releasedat"}},"required":["id","baseID","finalID","chainOrder","rarity"],"title":"CollectionEntry","type":"object"},"IndividualProfile":{"additionalProperties":false,"properties":{"instanceID":{"maxLength":128,"minLength":1,"pattern":"^[A-Za-z0-9_-]+$","title":"Instanceid","type":"string"},"seed":{"maximum":18446744073709551615,"minimum":0,"title":"Seed","type":"integer"},"gender":{"anyOf":[{"enum":["male","female","genderless"],"type":"string"},{"type":"null"}],"default":null,"title":"Gender"},"ivs":{"$ref":"#/$defs/IndividualValues"},"abilitySlot":{"anyOf":[{"maximum":3,"minimum":1,"type":"integer"},{"type":"null"}],"default":null,"title":"Abilityslot"},"abilityName":{"anyOf":[{"maxLength":100,"pattern":"^[a-z0-9-]+$","type":"string"},{"type":"null"}],"default":null,"title":"Abilityname"},"abilityIsHidden":{"title":"Abilityishidden","type":"boolean"},"level":{"maximum":100,"minimum":1,"title":"Level","type":"integer"},"growthTokens":{"maximum":9000000000000000,"minimum":0,"title":"Growthtokens","type":"integer"},"moves":{"items":{"$ref":"#/$defs/KnownMove"},"maxItems":100,"title":"Moves","type":"array"}},"required":["instanceID","seed","ivs","abilityIsHidden","level","growthTokens","moves"],"title":"IndividualProfile","type":"object"},"IndividualValues":{"additionalProperties":false,"properties":{"hp":{"maximum":31,"minimum":0,"title":"Hp","type":"integer"},"attack":{"maximum":31,"minimum":0,"title":"Attack","type":"integer"},"defense":{"maximum":31,"minimum":0,"title":"Defense","type":"integer"},"specialAttack":{"maximum":31,"minimum":0,"title":"Specialattack","type":"integer"},"specialDefense":{"maximum":31,"minimum":0,"title":"Specialdefense","type":"integer"},"speed":{"maximum":31,"minimum":0,"title":"Speed","type":"integer"}},"required":["hp","attack","defense","specialAttack","specialDefense","speed"],"title":"IndividualValues","type":"object"},"KnownMove":{"additionalProperties":false,"properties":{"name":{"maxLength":100,"minLength":1,"pattern":"^[a-z0-9-]+$","title":"Name","type":"string"},"learnedAtLevel":{"maximum":100,"minimum":0,"title":"Learnedatlevel","type":"integer"}},"required":["name","learnedAtLevel"],"title":"KnownMove","type":"object"}},"additionalProperties":false,"properties":{"installBaselineSet":{"default":false,"title":"Installbaselineset","type":"boolean"},"usedSinceInstall":{"default":0,"maximum":9000000000000000,"minimum":0,"title":"Usedsinceinstall","type":"integer"},"spentTokens":{"default":0,"maximum":9000000000000000,"minimum":0,"title":"Spenttokens","type":"integer"},"eggUsage":{"default":0,"maximum":9000000000000000,"minimum":0,"title":"Eggusage","type":"integer"},"eggTier":{"anyOf":[{"enum":["common","uncommon","rare","legendary"],"type":"string"},{"type":"null"}],"default":null,"title":"Eggtier"},"pendingHatchID":{"anyOf":[{"maximum":649,"minimum":1,"type":"integer"},{"type":"null"}],"default":null,"title":"Pendinghatchid"},"pendingUnownForm":{"anyOf":[{"maxLength":12,"type":"string"},{"type":"null"}],"default":null,"title":"Pendingunownform"},"claimedTodayTokensByProvider":{"anyOf":[{"additionalProperties":{"maximum":9000000000000000,"minimum":0,"type":"integer"},"type":"object"},{"type":"null"}],"default":null,"title":"Claimedtodaytokensbyprovider"},"lastDate":{"default":"","maxLength":10,"pattern":"^(?:|\\d{4}-\\d{2}-\\d{2})$","title":"Lastdate","type":"string"},"active":{"anyOf":[{"$ref":"#/$defs/ActivePokemon"},{"type":"null"}],"default":null},"representativeSpeciesID":{"anyOf":[{"maximum":649,"minimum":1,"type":"integer"},{"type":"null"}],"default":null,"title":"Representativespeciesid"},"representativeUnownForm":{"anyOf":[{"maxLength":12,"type":"string"},{"type":"null"}],"default":null,"title":"Representativeunownform"},"dex":{"items":{"$ref":"#/$defs/CollectionEntry"},"maxItems":10000,"title":"Dex","type":"array"},"collectedFinals":{"items":{"type":"string"},"maxItems":10000,"title":"Collectedfinals","type":"array"},"language":{"default":"en","enum":["ko","en","ja","es","fr","pt","de","ru"],"title":"Language","type":"string"},"inventory":{"additionalProperties":{"maximum":1000000,"minimum":0,"type":"integer"},"propertyNames":{"enum":["rareCandy","mint","shinyCharm"]},"title":"Inventory","type":"object"},"candyGrantTier":{"additionalProperties":{"maximum":1000000,"minimum":0,"type":"integer"},"title":"Candygranttier","type":"object"},"candyWindowEpoch":{"additionalProperties":{"type":"string"},"title":"Candywindowepoch","type":"object"},"candyFeatureSeeded":{"default":false,"title":"Candyfeatureseeded","type":"boolean"}},"title":"CompanionSave","type":"object"}$schema$::jsonb) then
+    raise sqlstate 'PT422' using message='invalid_save';
+  end if;
+  for k in select jsonb_object_keys(s) loop
+    if not (k = any(array['installBaselineSet','usedSinceInstall','spentTokens','eggUsage','eggTier',
+      'pendingHatchID','pendingUnownForm','claimedTodayTokensByProvider','lastDate','active',
+      'representativeSpeciesID','representativeUnownForm','dex','collectedFinals','language',
+      'inventory','candyGrantTier','candyWindowEpoch','candyFeatureSeeded'])) then
+      raise sqlstate 'PT422' using message = 'unknown_field';
+    end if;
+  end loop;
+  foreach k in array array['usedSinceInstall','spentTokens','eggUsage'] loop
+    v := coalesce(s->k, '0'::jsonb);
+    if jsonb_typeof(v) <> 'number' or v::text !~ '^[0-9]+$' or (v::text)::numeric > 9000000000000000 then
+      raise sqlstate 'PT422' using message = 'invalid_counter';
+    end if;
+  end loop;
+  if coalesce((s->>'spentTokens')::numeric,0) > coalesce((s->>'usedSinceInstall')::numeric,0) then
+    raise sqlstate 'PT422' using message = 'invalid_balance';
+  end if;
+  foreach k in array array['installBaselineSet','candyFeatureSeeded'] loop
+    if s ? k and jsonb_typeof(s->k) <> 'boolean' then raise sqlstate 'PT422' using message='invalid_boolean'; end if;
+  end loop;
+  if s ? 'language' and not (s->>'language' = any(array['ko','en','ja','es','fr','pt','de','ru'])) then
+    raise sqlstate 'PT422' using message='invalid_language';
+  end if;
+  foreach k in array array['inventory','candyGrantTier','candyWindowEpoch'] loop
+    v := coalesce(s->k, '{}'::jsonb);
+    if jsonb_typeof(v) <> 'object' or (select count(*) from jsonb_object_keys(v)) > 1000 then
+      raise sqlstate 'PT422' using message='invalid_ledger';
+    end if;
+  end loop;
+  for k,v in select * from jsonb_each(coalesce(s->'inventory','{}'::jsonb)) loop
+    if not (k = any(array['rareCandy','mint','shinyCharm'])) or jsonb_typeof(v) <> 'number'
+       or v::text !~ '^[0-9]+$' or (v::text)::numeric > 1000000 then
+      raise sqlstate 'PT422' using message='invalid_inventory';
+    end if;
+  end loop;
+  for k,v in select * from jsonb_each(coalesce(s->'candyGrantTier','{}'::jsonb)) loop
+    if length(k)>256 or jsonb_typeof(v)<>'number' or v::text !~ '^[0-9]+$' or (v::text)::numeric>1000000 then
+      raise sqlstate 'PT422' using message='invalid_ledger';
+    end if;
+  end loop;
+  for k,v in select * from jsonb_each(coalesce(s->'candyWindowEpoch','{}'::jsonb)) loop
+    if length(k)>256 or jsonb_typeof(v)<>'string' or length(v #>> '{}')>128 then
+      raise sqlstate 'PT422' using message='invalid_ledger';
+    end if;
+  end loop;
+  foreach k in array array['dex','collectedFinals'] loop
+    v := coalesce(s->k, '[]'::jsonb);
+    if jsonb_typeof(v) <> 'array' or jsonb_array_length(v)>10000 then
+      raise sqlstate 'PT422' using message='invalid_collection';
+    end if;
+  end loop;
+  if (select count(*) from jsonb_array_elements(coalesce(s->'dex','[]'::jsonb))) <>
+     (select count(distinct value->>'id') from jsonb_array_elements(coalesce(s->'dex','[]'::jsonb))) then
+    raise sqlstate 'PT422' using message='duplicate_individual';
+  end if;
+  if s->'active' is not null and s->'active'<>'null'::jsonb and
+     (s->'active'->>'stageIndex')::int >= jsonb_array_length(s->'active'->'pathIDs') then
+    raise sqlstate 'PT422' using message='invalid_stage';
+  end if;
+  if s->'claimedTodayTokensByProvider' is not null and s->'claimedTodayTokensByProvider'<>'null'::jsonb then
+    if (select count(*) from jsonb_object_keys(s->'claimedTodayTokensByProvider'))>1000 or
+       exists(select 1 from jsonb_object_keys(s->'claimedTodayTokensByProvider') k where length(k)>256) then
+      raise sqlstate 'PT422' using message='invalid_ledger';
+    end if;
+  end if;
+  if exists(select 1 from jsonb_array_elements_text(coalesce(s->'collectedFinals','[]'::jsonb)) value where length(value)>128) then
+    raise sqlstate 'PT422' using message='invalid_collection';
+  end if;
+  for e in select * from jsonb_array_elements(coalesce(s->'dex','[]'::jsonb)) loop
+    if jsonb_typeof(e)<>'object' or coalesce(e->>'id','') !~ '^[A-Za-z0-9_-]{1,128}$'
+       or coalesce(e->>'baseID','') !~ '^[0-9]{1,3}$' or coalesce(e->>'finalID','') !~ '^[0-9]{1,3}$'
+       or not ((e->>'baseID')::int between 1 and 649) or not ((e->>'finalID')::int between 1 and 649)
+       or (e ? 'isShiny' and jsonb_typeof(e->'isShiny')<>'boolean') then
+      raise sqlstate 'PT422' using message='invalid_individual';
+    end if;
+  end loop;
+exception when invalid_text_representation or numeric_value_out_of_range then
+  raise sqlstate 'PT422' using message='invalid_save';
+end $$;
+
+create or replace function public.write_trainer_save(p_expected_revision bigint,p_request_id uuid,p_operation text,p_state jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare u uuid; current_revision bigint; result_revision bigint; payload_digest text; previous public.trainer_save_operations;
+begin
+  if p_request_id is null or p_expected_revision is null or p_expected_revision<0 or p_expected_revision>=9000000000000000
+     or p_operation is null or p_operation <> 'save' then raise sqlstate 'PT422' using message='invalid_command'; end if;
+  perform public.validate_trainer_save(p_state);
+  u := public.ensure_trainer_profile();
+  payload_digest := encode(sha256(convert_to(jsonb_build_array(p_expected_revision,p_operation,p_state)::text,'UTF8')),'hex');
+  select * into previous from public.trainer_save_operations where owner_id=u and request_id=p_request_id;
+  if found then
+    if previous.digest<>payload_digest then raise sqlstate 'PT409' using message='request_reused'; end if;
+    return jsonb_build_object('ownerID',u,'revision',previous.result_revision,'requestID',p_request_id);
+  end if;
+  select revision into current_revision from public.trainer_saves where owner_id=u for update;
+  current_revision := coalesce(current_revision,0);
+  if current_revision<>p_expected_revision then
+    raise sqlstate 'PT409' using message='save_conflict';
+  end if;
+  result_revision := current_revision+1;
+  insert into public.trainer_saves(owner_id,revision,core) values(u,result_revision,p_state-array['dex','inventory','candyGrantTier','candyWindowEpoch'])
+    on conflict(owner_id) do update set revision=excluded.revision,core=excluded.core,updated_at=now();
+  delete from public.trainer_collection where owner_id=u;
+  insert into public.trainer_collection(owner_id,individual_id,position,base_id,final_id,shiny,detail)
+    select u,e->>'id',(ordinality-1)::int,(e->>'baseID')::int,(e->>'finalID')::int,coalesce((e->>'isShiny')::boolean,false),e-array['id','baseID','finalID','isShiny']
+      from jsonb_array_elements(coalesce(p_state->'dex','[]'::jsonb)) with ordinality t(e,ordinality);
+  delete from public.trainer_inventory where owner_id=u;
+  insert into public.trainer_inventory select u,key,value::int from jsonb_each_text(coalesce(p_state->'inventory','{}'::jsonb));
+  delete from public.trainer_candy_ledger where owner_id=u;
+  insert into public.trainer_candy_ledger
+    select u,key,(p_state->'candyGrantTier'->>key)::int,p_state->'candyWindowEpoch'->>key from (
+      select jsonb_object_keys(coalesce(p_state->'candyGrantTier','{}'::jsonb)) key union
+      select jsonb_object_keys(coalesce(p_state->'candyWindowEpoch','{}'::jsonb)) key) keys;
+  insert into public.trainer_save_operations values(u,p_request_id,payload_digest,result_revision);
+  -- Bound retry records; commands older than this window fail CAS instead of overwriting.
+  delete from public.trainer_save_operations operations where operations.owner_id=u and operations.result_revision<current_revision-100;
+  return jsonb_build_object('ownerID',u,'revision',result_revision,'requestID',p_request_id);
+end $$;

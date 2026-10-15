@@ -25,6 +25,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var floatingPet: FloatingPetController!
     private let navigation = PopoverNavigation()
     private var profileController: ProfileWindowController!
+    private var cloudAccountWindow: CloudAccountWindow?
+    #if DEBUG
+    private var cloudPreviewWindow: NSWindow?
+    #endif
 
     // 메뉴바 캐릭터 애니메이션 — 단일 타이머로 프레임 순환.
     // 프레임 = 이미 22px 로 합성된 이미지 + delay. egg/static 은 2프레임 bob, animated 는 GIF 실제 프레임.
@@ -59,6 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
+        if let window = CloudPreviewBootstrap.windowIfRequested() {
+            cloudPreviewWindow = window
+            return
+        }
         if let controller = ProfilePreviewBootstrap.controllerIfRequested() {
             profileController = controller
             controller.open(language: .ko)
@@ -87,10 +95,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // Tooltips show 40% sooner than AppKit's 1 s default; the app's hover hints are short and
         // the popover closes quickly. Registration domain only, so a user `defaults write` still wins.
         UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 600])
-        Self.migrateLegacyStorageIfNeeded()   // TokenMac → PokeTokenBar 리네임: 기존 companion/캐시 보존
         LoginItem.migrateFromLegacyLoginItemIfNeeded()   // 로그인아이템 → KeepAlive 에이전트(크래시 자동 재실행)
         store = UsageStore()
-        companion = CompanionStore()
+        companion = CompanionStore(cloudMode: true)
+        companion.cloudController = CloudCompanionController(store: companion, configuration: try? CloudConfiguration.load())
+        if let controller = companion.cloudController {
+            cloudAccountWindow = CloudAccountWindow(store: companion, controller: controller)
+            cloudAccountWindow?.open()
+        }
         profileController = ProfileWindowController()
         Task { await companion.preparePokemonProfiles() }
         updater = UpdateChecker()
@@ -561,6 +573,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// 팝오버 콘텐츠(SwiftUI 호스팅) 생성. .transient 팝오버는 contentViewController 를 평생 보유해 닫혀도
     /// NSHostingView 트리가 상주하며 매 디스플레이 사이클 재레이아웃된다(측정: idle CPU 최대 비용 — 닫힌
     /// 팝오버의 relative-time Text self-invalidation × 메뉴 애니메이션 CA 커밋). 그래서 열 때 만들고 닫힐 때 해제.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard companion?.cloudController?.hasUnsavedChanges == true else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = "서버에 아직 저장되지 않은 변경이 있습니다."
+        alert.informativeText = "종료하면 저장되지 않은 변경은 사라집니다. 클라우드 관리에서 저장을 재시도할 수 있습니다."
+        alert.addButton(withTitle: "앱으로 돌아가기")
+        alert.addButton(withTitle: "저장하지 않고 종료")
+        return alert.runModal() == .alertFirstButtonReturn ? .terminateCancel : .terminateNow
+    }
+
     func openPopover() {
         // Pet click is an outside click for a .transient popover — if already shown it is
         // already dismissing; the old "activate/makeKey" branch never applied.

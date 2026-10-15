@@ -35,3 +35,14 @@ docs/*
 
 # Local-only review-gate opt-out (not published)
 .no-review-gate
+
+# Cloud service local runtime / secrets
+server/.venv/
+server/.pytest_cache/
+server/**/__pycache__/
+server/.vercel/
+server/.env
+server/.env.*
+!server/.env.example
+supabase/.temp/
+supabase/.branches/
