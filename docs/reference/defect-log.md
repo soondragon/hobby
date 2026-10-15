@@ -1153,3 +1153,9 @@ read_when:
 - Growth validation must use the actual repeat multiplier. Assuming a multiplier of two accepted
   premature graduation for first-time species. Database regression tests reject that exact boundary,
   while preserving legitimate graduation, paid items, new births, and Ditto profile rebasing.
+
+- OAuth scope omission does not remove previously approved GitHub grants. The public-profile adapter
+  explicitly requests an empty scope and rejects nonempty scopes both in the exchange result and
+  effective profile response header. Empty/missing scope and extra-scope regressions are tested;
+  removing the first guard produces three expected failures. Account mapping uses the numeric GitHub
+  ID rather than an alias or email, preserving ownership through profile renames.

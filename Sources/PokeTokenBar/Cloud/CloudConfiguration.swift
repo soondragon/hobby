@@ -4,6 +4,7 @@ struct CloudConfiguration: Codable, Sendable {
     let supabaseURL: URL
     let publishableKey: String
     let serviceURL: URL
+    var githubClientID: String? = nil
 
     static func load() throws -> Self? {
         guard let url = Bundle.main.url(forResource: "TrainerCloud", withExtension: "json") else { return nil }
@@ -26,10 +27,11 @@ struct CloudConfiguration: Codable, Sendable {
 }
 
 enum CloudError: Error, LocalizedError, Equatable {
-    case configuration, authentication, transport, invalidResponse, conflict, missingSave, locked, storage, growthRejected, rateLimited
+    case configuration, authentication, transport, invalidResponse, conflict, missingSave, locked, storage, growthRejected, rateLimited, publicProfileOnly
     var errorDescription: String? {
         switch self {
         case .configuration: "클라우드 연결 설정이 필요합니다."
+        case .publicProfileOnly: "기존 GitHub 승인에 이메일 등 추가 권한이 남아 있습니다. GitHub의 앱 승인 설정에서 이전 연결을 해제한 뒤 다시 로그인해 주세요."
         case .authentication: "GitHub 로그인을 다시 확인해 주세요."
         case .transport: "서버에 연결하지 못했습니다. 변경을 멈추고 세이브를 보호합니다."
         case .invalidResponse: "서버 응답을 검증하지 못했습니다."

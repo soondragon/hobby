@@ -5,8 +5,6 @@ import pytest
 from fastapi import HTTPException
 from app.main import create_app
 from app.models import CompanionSave
-from app.configuration import Configuration
-from app.gateway import SupabaseGateway
 
 
 class Gateway:
@@ -65,21 +63,3 @@ def test_database_schema_cannot_silently_drift_from_api_model():
     schemas = re.findall(r'\$schema\$(.*?)\$schema\$', migration, flags=re.S)
     assert schemas
     assert all(json.loads(schema) == CompanionSave.model_json_schema() for schema in schemas)
-
-
-@pytest.mark.asyncio
-async def test_gateway_forwards_same_user_token_and_masks_errors():
-    seen = []
-    async def handler(request):
-        seen.append(request)
-        if request.url.path.endswith('/user'):
-            return httpx.Response(200, json={'id': str(uuid4()), 'identities': [{'provider': 'github'}]})
-        return httpx.Response(409, json={'code': 'PT409', 'message': 'PRIVATE_PAYLOAD'})
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        gateway = SupabaseGateway(Configuration('https://example.supabase.co', 'sb_publishable_test'), client)
-        await gateway.authenticate('user-token')
-        with pytest.raises(HTTPException) as error:
-            await gateway.read('user-token')
-        assert error.value.status_code == 409
-        assert error.value.detail == 'save_conflict'
-        assert all(request.headers['Authorization'] == 'Bearer user-token' for request in seen)

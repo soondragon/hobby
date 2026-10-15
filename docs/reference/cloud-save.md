@@ -1,17 +1,21 @@
 # Account-owned cloud saves
 
-The cloud build uses Supabase Auth and PostgreSQL, with a Python 3.12 FastAPI API on Vercel.
+**Current authentication implementation:** [GitHub public-profile authentication](public-profile-auth.md).
+The new no-email adapter is locally tested and awaiting coordinated activation. Historical production
+verification below refers to the earlier Supabase Auth adapter.
+
+The cloud build uses GitHub public-profile authentication and Supabase PostgreSQL, with a Python 3.12 FastAPI API on Vercel.
 It never loads, imports, exports, backs up, or falls back to a local Pokémon save. The old file
 is left untouched. Device preferences and authentication credentials are separate from game saves.
 
 ## Runtime flow
 
-1. The user signs in with GitHub through Supabase using authorization code + PKCE (S256).
-2. The native app verifies `/auth/v1/user`. Supabase credentials are stored in a dedicated,
-   device-only Keychain item. Keychain restoration is an explicit button action.
-3. The API verifies the bearer token with Supabase Auth. It forwards that same user token to
-   PostgreSQL RPCs; no service-role key is used by the native app or API.
-4. The database derives ownership from `auth.uid()` and GitHub identity data maintained by Auth.
+1. The user signs in directly with GitHub using empty OAuth scopes, state and S256 PKCE.
+2. The backend verifies only the public numeric GitHub ID and alias and issues opaque application
+   sessions. Device-only Keychain storage uses a separate versioned namespace.
+3. The API binds each hashed application token to its owner in a private database function; a
+   dedicated restricted database role replaces user JWT forwarding. There is no email lookup.
+4. The database derives ownership from `auth.uid()` and the server-verified GitHub account mapping.
    GitHub alias is display data. A caller cannot select someone else's save by supplying an alias.
 5. `GET /api/companion` returns the authenticated user's save. An absent save requires an explicit
    **Start on server** action. Only a successful server receipt unlocks gameplay.
@@ -33,7 +37,7 @@ Difficulty settings are stored with the server growth policy and restored togeth
 
 | Table | Responsibility |
 | --- | --- |
-| `trainer_profiles` | Auth UUID, verified GitHub provider ID, display alias |
+| `trainer_profiles` | Stable owner UUID, verified GitHub provider ID, display alias |
 | `trainer_saves` | Schema version, revision, bounded core state, update time |
 | `trainer_collection` | Individual ID, order, species IDs, shiny flag, remaining individual details |
 | `trainer_inventory` | Item kind and quantity per owner |
@@ -51,10 +55,12 @@ integer JSON parser and PostgreSQL JSONB preserve their exact value, including `
 - Direct table reads and writes are revoked, including owner reads. RLS remains enabled as defense in depth.
 - Public read/write RPCs run as security invoker. Their guarded implementations are in the
   nonexposed `trainer_internal` schema. Raw snapshot helpers cannot be executed by clients.
-- Both RPCs require the JWT session ID to exist in Auth's sessions table for the same user.
-  Logout revokes only the current device's Supabase session before clearing local credentials.
-- GitHub client secrets live only in Supabase provider configuration. They are absent from source,
-  app resources, API environment, and logs. The native bundle contains only public connection settings.
+- The new API accepts opaque application tokens and binds their owner inside a private function.
+  Guarded RPCs validate the bound session, including immediate logout/expiry. Compatibility with
+  existing Auth sessions is confined to the database transition; the new API rejects old JWTs.
+- The new adapter's GitHub client secret and restricted DB credential are backend environment
+  secrets only. They never enter source, app resources, logs, or the native public configuration.
+  The old provider secret remains in Supabase until coordinated activation retires that adapter.
 - Credentials are not placed in query strings or preference files. HTTP redirects carrying bearer
   tokens are refused, HTTP caches are disabled, and API errors do not echo private save payloads.
 - The automatic-RLS trigger's unnecessary client execute permission is revoked separately.
@@ -73,11 +79,12 @@ open "$HOME/Applications/PokeTokenBar Cloud.app"
 
 The cloud app is installed separately from the upstream app and the older local-save hobby app.
 `scripts/build-cloud-preview.sh` builds only the authentication/account window for debugging.
-The native callback is `hobbytrainer://auth/callback`; Supabase must allow this exact URL.
-The GitHub OAuth callback is the project's `/auth/v1/callback` HTTPS URL, with no wildcard.
+The native callback is `hobbytrainer://auth/callback`; GitHub must register this exact URI.
+The current GitHub OAuth callback is exactly `hobbytrainer://auth/callback`; activation must update
+the existing app registration from the previous Supabase HTTPS callback.
 
-Vercel project root is `server`, using the FastAPI preset and Python 3.12. Required environment:
-`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`. Preview deployment protection remains enabled; production
+Vercel project root is `server`, using the FastAPI preset and Python 3.12. Current backend settings:
+`GITHUB_PROFILE_CLIENT_ID`, `GITHUB_PROFILE_CLIENT_SECRET`, `TRAINER_DATABASE_URL` (server only). Preview deployment protection remains enabled; production
 API requests are protected by Supabase user authentication. Apply migrations in filename order.
 The current API is at `https://hobby-trainer.vercel.app/api/health`.
 
@@ -149,7 +156,10 @@ CLI account cannot access that scope. Do not claim that pending API code is depl
 
 ### End-user login permissions
 
-Users need GitHub authentication only. They never need repository, Vercel administration, Supabase
+Users need GitHub authentication only. The current adapter requests empty scopes; see
+[public-profile auth](public-profile-auth.md) for implementation and activation status.
+
+Historical provider limitation: They never need repository, Vercel administration, Supabase
 administration, or cloud-account permissions. Alias is display-only; authorization uses the stable
 Supabase user UUID. Supabase's built-in GitHub provider always requests `user:email` and reads verified
 email addresses; its current implementation does not support removing that scope by a client option.

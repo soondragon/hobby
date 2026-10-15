@@ -1,12 +1,9 @@
 import AppKit
 import AuthenticationServices
-import CryptoKit
-import Security
 
 struct CloudUser: Decodable, Sendable {
-    struct Identity: Decodable, Sendable { let provider: String }
     let id: UUID
-    let identities: [Identity]
+    let alias: String
 }
 
 @MainActor
@@ -26,7 +23,7 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
         self.configuration = configuration
         self.persistCredentials = persistCredentials
     }
-    private var vault: CloudCredentialVault { .init(project: configuration.supabaseURL.absoluteString) }
+    private var vault: CloudCredentialVault { .init(project: configuration.serviceURL.absoluteString + "/public-profile-v1") }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         NSApp.keyWindow ?? NSApp.windows.first ?? ASPresentationAnchor()
@@ -34,17 +31,11 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
 
     func signIn() async throws {
         let operation = generation
-        var bytes = [UInt8](repeating: 0, count: 32)
-        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw CloudError.authentication }
-        let verifier = Data(bytes).base64URLEncoded
-        let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded
-        var url = URLComponents(url: configuration.supabaseURL.appendingPathComponent("auth/v1/authorize"), resolvingAgainstBaseURL: false)!
-        url.queryItems = [.init(name: "provider", value: "github"),
-                          .init(name: "redirect_to", value: "hobbytrainer://auth/callback"),
-                          .init(name: "code_challenge", value: challenge), .init(name: "code_challenge_method", value: "s256")]
+        guard let clientID = configuration.githubClientID else { throw CloudError.configuration }
+        let authorization = try GitHubProfileAuthorization(clientID: clientID)
         let callback: URL = try await withCheckedThrowingContinuation { continuation in
             let completion = CloudBrowserCompletion(continuation)
-            let session = ASWebAuthenticationSession(url: url.url!, callbackURLScheme: "hobbytrainer", completionHandler: completion.handler)
+            let session = ASWebAuthenticationSession(url: authorization.url, callbackURLScheme: "hobbytrainer", completionHandler: completion.handler)
             session.presentationContextProvider = self
             // Use the user's configured browser rather than choosing another Chrome profile.
             session.prefersEphemeralWebBrowserSession = false
@@ -52,11 +43,9 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
             if !session.start() { completion.finish(url: nil) }
         }
         browserSession = nil
-        guard operation == generation, callback.scheme == "hobbytrainer", callback.host == "auth", callback.path == "/callback",
-              let code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "code" })?.value else {
-            throw CloudError.authentication
-        }
-        let value = try await exchange(grant: "pkce", body: ["auth_code": code, "code_verifier": verifier])
+        guard operation == generation else { throw CancellationError() }
+        let code = try authorization.code(from: callback)
+        let value = try await exchange(path: "github/exchange", body: ["code": code, "verifier": authorization.verifier])
         guard operation == generation else { throw CancellationError() }
         try await accept(value, operation: operation)
     }
@@ -64,23 +53,23 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
     func restore() async throws {
         let operation = generation
         guard persistCredentials, let previous = try vault.read() else { throw CloudError.authentication }
-        let value = try await exchange(grant: "refresh_token", body: ["refresh_token": previous.refresh_token])
+        let value = try await exchange(path: "refresh", body: ["refresh_token": previous.refresh_token])
         guard operation == generation else { throw CancellationError() }
         try await accept(value, operation: operation)
     }
 
-    private func exchange(grant: String, body: [String: String]) async throws -> CloudCredential {
-        var url = URLComponents(url: configuration.supabaseURL.appendingPathComponent("auth/v1/token"), resolvingAgainstBaseURL: false)!
-        url.queryItems = [.init(name: "grant_type", value: grant)]
-        return try await transport.request(CloudCredential.self, url: url.url!, method: "POST", key: configuration.publishableKey,
-                                           body: JSONEncoder().encode(body))
+    private func exchange(path: String, body: [String: String]) async throws -> CloudCredential {
+        try await transport.request(CloudCredential.self,
+            url: configuration.serviceURL.appendingPathComponent("api/auth/" + path), method: "POST",
+            body: JSONEncoder().encode(body))
     }
 
     private func accept(_ value: CloudCredential, operation: UUID) async throws {
-        let verified = try await transport.request(CloudUser.self, url: configuration.supabaseURL.appendingPathComponent("auth/v1/user"),
-                                                    token: value.access_token, key: configuration.publishableKey)
+        let verified = try await transport.request(CloudUser.self, url: configuration.serviceURL.appendingPathComponent("api/auth/user"),
+                                                    token: value.access_token)
         guard operation == generation else { throw CancellationError() }
-        guard verified.identities.contains(where: { $0.provider == "github" }) else { throw CloudError.authentication }
+        guard value.access_token.hasPrefix("hts_"), value.refresh_token.hasPrefix("htr_"),
+              (1...900).contains(value.expires_in), !verified.alias.isEmpty, verified.alias.count <= 39 else { throw CloudError.authentication }
         if persistCredentials { try vault.write(value) }
         credential = value
         user = verified
@@ -94,7 +83,7 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
         let task: Task<CloudCredential, Error>
         if let refreshTask { task = refreshTask }
         else {
-            task = Task { try await self.exchange(grant: "refresh_token", body: ["refresh_token": credential.refresh_token]) }
+            task = Task { try await self.exchange(path: "refresh", body: ["refresh_token": credential.refresh_token]) }
             refreshTask = task
         }
         defer { if operation == generation { refreshTask = nil } }
@@ -108,10 +97,8 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
         // Revoke only this device's session. Other signed-in devices stay connected.
         if credential != nil {
             let token = try await accessToken()
-            var endpoint = URLComponents(url: configuration.supabaseURL.appendingPathComponent("auth/v1/logout"), resolvingAgainstBaseURL: false)!
-            endpoint.queryItems = [.init(name: "scope", value: "local")]
-            let _: CloudEmptyResponse = try await transport.request(CloudEmptyResponse.self, url: endpoint.url!,
-                method: "POST", token: token, key: configuration.publishableKey)
+            let _: CloudEmptyResponse = try await transport.request(CloudEmptyResponse.self,
+                url: configuration.serviceURL.appendingPathComponent("api/auth/logout"), method: "POST", token: token)
         }
         generation = UUID()
         browserSession?.cancel()
@@ -122,11 +109,5 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
         user = nil
         expiresAt = .distantPast
         if persistCredentials { try vault.clear() }
-    }
-}
-
-private extension Data {
-    var base64URLEncoded: String {
-        base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
     }
 }

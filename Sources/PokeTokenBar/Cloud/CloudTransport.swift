@@ -1,6 +1,7 @@
 import Foundation
 
 struct CloudEmptyResponse: Decodable, Sendable {}
+private struct CloudFailureDetail: Decodable { let detail: String }
 
 /// An ephemeral transport never follows redirects carrying a bearer token.
 final class CloudTransport: NSObject, URLSessionTaskDelegate, Sendable {
@@ -30,7 +31,13 @@ final class CloudTransport: NSObject, URLSessionTaskDelegate, Sendable {
         guard let http = response as? HTTPURLResponse else { throw CloudError.invalidResponse }
         switch http.statusCode {
         case 200..<300: break
-        case 401, 403: throw CloudError.authentication
+        case 403:
+            if data.count <= 4096,
+               (try? JSONDecoder().decode(CloudFailureDetail.self, from: data))?.detail == "github_public_profile_only" {
+                throw CloudError.publicProfileOnly
+            }
+            throw CloudError.authentication
+        case 401: throw CloudError.authentication
         case 409: throw CloudError.conflict
         case 422: throw CloudError.growthRejected
         case 429: throw CloudError.rateLimited

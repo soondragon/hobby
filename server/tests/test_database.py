@@ -10,6 +10,7 @@ import pytest
 DSN = os.environ.get('TRAINER_TEST_DATABASE_URL')
 pytestmark = pytest.mark.skipif(not DSN, reason='Disposable DB not selected')
 A, B = str(uuid4()), str(uuid4())
+MIGRATION_OWNER = str(uuid4())
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -25,6 +26,14 @@ def schema():
         db.execute("create function auth.jwt() returns jsonb language sql stable as $$ select jsonb_build_object('session_id',nullif(current_setting('request.jwt.claim.session_id',true),'')) $$")
         db.execute('grant usage on schema auth,public to anon,authenticated')
         for migration in sorted(Path('../supabase/migrations').glob('*.sql')):
+            if migration.name.endswith('_public_profile_auth.sql'):
+                # Populate the OLD schema before migration, preserving an actual existing save.
+                db.execute('insert into auth.users values(%s)', (MIGRATION_OWNER,))
+                db.execute("insert into auth.identities values(%s,'github','991120',%s)",
+                           (MIGRATION_OWNER, Jsonb({'user_name': 'pre-migration'})))
+                db.execute("select set_config('request.jwt.claim.sub',%s,false)", (MIGRATION_OWNER,))
+                db.execute('select trainer_internal.write_snapshot(%s,%s,%s,%s)',
+                           (0, uuid4(), 'save', Jsonb(baseline())))
             db.execute(migration.read_text())
         for uid, alias in [(A, 'trainer-a'), (B, 'trainer-b')]:
             db.execute('insert into auth.users values(%s)', (uid,))
@@ -317,3 +326,77 @@ def test_active_cannot_hide_growth_in_future_egg_or_buy_free_premium_egg():
     assert_rejected(previous,candidate)
     previous=baseline();candidate=copy.deepcopy(previous);candidate['eggTier']='rare'
     assert_rejected(previous,candidate)
+
+
+@pytest.mark.asyncio
+async def test_email_free_login_preserves_legacy_save_alias_rename_and_session_isolation():
+    """HTTP -> mock GitHub public identity -> real least-privilege PostgreSQL -> existing save."""
+    import httpx
+    from psycopg_pool import AsyncConnectionPool
+    from app.github_profile import GitHubProfileProvider
+    from app.profile_configuration import ProfileConfiguration
+    from app.profile_sessions import ProfileSessions
+    from app.main import create_app
+    uid=MIGRATION_OWNER
+    current_identity=[991120,'renamed-user'];requests=[]
+    async def github(request):
+        requests.append(request.url.path)
+        if request.url.host=='github.com':
+            return httpx.Response(200,json=dict(access_token='github-public-only',token_type='bearer',scope=''))
+        return httpx.Response(200,headers={'X-OAuth-Scopes':''},json=dict(id=current_identity[0],login=current_identity[1]))
+    async def restrict(connection):
+        await connection.execute('set role trainer_api');await connection.commit()
+    async with AsyncConnectionPool(DSN,min_size=1,max_size=2,configure=restrict,open=False) as pool:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(github)) as upstream:
+            sessions=ProfileSessions(pool)
+            provider=GitHubProfileProvider(ProfileConfiguration('client','server-only','unused'),upstream)
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(sessions,provider)),base_url='http://test') as client:
+                async def login():
+                    result=await client.post('/api/auth/github/exchange',json={'code':'one-time-code','verifier':'v'*43})
+                    assert result.status_code==200,result.text
+                    return result.json()
+                first=await login();assert first['user']==dict(id=uid,alias='renamed-user')
+                headers={'Authorization':'Bearer '+first['access_token']}
+                loaded=(await client.get('/api/companion',headers=headers)).json()
+                assert loaded['revision']==1 and loaded['ownerID']==uid and loaded['alias']=='renamed-user'
+                assert loaded['state']['claimedTodayTokensByProvider']==baseline()['claimedTodayTokensByProvider']
+                assert 'email' not in first and 'email' not in first['user']
+                command=dict(schemaVersion=1,expectedRevision=1,requestID=str(uuid4()),operation='save',state=loaded['state'])
+                assert (await client.put('/api/companion',headers=headers,json=command)).status_code==200
+                current_identity[:]=[991123,'other-user']
+                second=await login();foreign_headers={'Authorization':'Bearer '+second['access_token']}
+                other=(await client.get('/api/companion',headers=foreign_headers)).json()
+                assert other['revision']==0 and other['ownerID']!=uid
+                command['ownerID']=uid
+                assert (await client.put('/api/companion',headers=foreign_headers,json=command)).status_code==422
+                assert (await client.get('/api/companion?alias=renamed-user',headers=foreign_headers)).status_code==400
+                import asyncio
+                interleaved = await asyncio.gather(*[
+                    client.get('/api/companion',headers=headers if i%2==0 else foreign_headers) for i in range(20)])
+                assert all(result.status_code==200 and result.json()['ownerID']==(uid if i%2==0 else other['ownerID'])
+                           for i,result in enumerate(interleaved))
+                rotations=await asyncio.gather(*[client.post('/api/auth/refresh',json={'refresh_token':first['refresh_token']}) for _ in range(2)])
+                assert sorted(result.status_code for result in rotations)==[200,401]
+                refresh=next(result for result in rotations if result.status_code==200)
+                assert (await client.get('/api/companion',headers=headers)).status_code==401
+                assert (await client.post('/api/auth/refresh',json={'refresh_token':first['refresh_token']})).status_code==401
+                renewed={'Authorization':'Bearer '+refresh.json()['access_token']}
+                assert (await client.get('/api/companion',headers=renewed)).json()['revision']==2
+                assert (await client.post('/api/auth/logout',headers=renewed)).status_code==204
+                assert (await client.get('/api/companion',headers=renewed)).status_code==401
+                assert (await client.post('/api/auth/refresh',json={'refresh_token':refresh.json()['refresh_token']})).status_code==401
+                assert (await client.get('/api/companion',headers=foreign_headers)).status_code==200
+                assert (await client.get('/api/companion',headers={'Authorization':'Bearer old-supabase-jwt'})).status_code==401
+                with psycopg.connect(DSN,autocommit=True) as operator:
+                    operator.execute("update trainer_internal.profile_sessions set access_until=clock_timestamp()-interval '1 second',refresh_until=clock_timestamp()-interval '1 second' where owner_id=%s",(other['ownerID'],))
+                assert (await client.get('/api/companion',headers=foreign_headers)).status_code==401
+                assert (await client.post('/api/auth/refresh',json={'refresh_token':second['refresh_token']})).status_code==401
+                async with pool.connection() as connection:
+                    for table in ['public.trainer_saves','trainer_internal.profile_sessions']:
+                        with pytest.raises(psycopg.Error):await connection.execute('select * from '+table)
+                        await connection.rollback()
+    assert requests==['/login/oauth/access_token','/user']*2
+    with psycopg.connect(DSN) as db:
+        hashes=db.execute('select access_hash,refresh_hash from trainer_internal.profile_sessions').fetchall()
+        assert hashes and all(len(a)==len(r)==64 for a,r in hashes)
+        assert all(first['access_token'] not in row for row in hashes)
