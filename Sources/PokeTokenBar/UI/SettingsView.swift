@@ -69,6 +69,7 @@ struct SettingsView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
+                        ProfileEntryView(language: companion.language)
                         generalGroup(store)
                         difficultyGroup
                         menuBarGroup(store)

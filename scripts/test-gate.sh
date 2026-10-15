@@ -19,6 +19,13 @@ cd "$(dirname "$0")/.."
 THRESHOLD="${THRESHOLD:-75}"
 
 LOGIC_CORE=(
+  "Sources/PokeTokenBar/Authentication/GitHubAuthenticationClient.swift"
+  "Sources/PokeTokenBar/Authentication/GitHubConfiguration.swift"
+  "Sources/PokeTokenBar/Authentication/DeviceAuthorization.swift"
+  "Sources/PokeTokenBar/Profile/GitHubProfileClient.swift"
+  "Sources/PokeTokenBar/Profile/GitHubProfile.swift"
+  "Sources/PokeTokenBar/Profile/ProfileRepository.swift"
+  "Sources/PokeTokenBar/Profile/ProfileSession.swift"
   "Sources/PokeTokenBar/Core/CompanionModel.swift"
   "Sources/PokeTokenBar/Core/UnownForm.swift"
   "Sources/PokeTokenBar/Core/CollectionWeight.swift"
