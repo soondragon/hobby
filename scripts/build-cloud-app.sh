@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 swift build -c release
 TRAINER_BINARY="$(swift build -c release --show-bin-path)/PokeTokenBar"
-TRAINER_APP="$HOME/Applications/PokeTokenBar Cloud.app"
+TRAINER_APP="${TRAINER_APP_DESTINATION:-$HOME/Applications/PokeTokenBar Cloud.app}"
 mkdir -p "$TRAINER_APP/Contents/MacOS" "$TRAINER_APP/Contents/Resources"
 cp "$TRAINER_BINARY" "$TRAINER_APP/Contents/MacOS/PokeTokenBar"
 cp config/TrainerCloud.json "$TRAINER_APP/Contents/Resources/TrainerCloud.json"
