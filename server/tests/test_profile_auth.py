@@ -50,6 +50,23 @@ def test_backend_configuration_never_accepts_administrator_database_role(monkeyp
     assert ProfileConfiguration.from_environment().client_id=='client'
 
 
+def test_bundled_database_certificate_resolves_independently_of_working_directory(monkeypatch, tmp_path):
+    from pathlib import Path
+    from urllib.parse import urlsplit, parse_qs
+    monkeypatch.setenv('GITHUB_PROFILE_CLIENT_ID', 'client')
+    monkeypatch.setenv('GITHUB_PROFILE_CLIENT_SECRET', 'secret')
+    monkeypatch.setenv('TRAINER_DATABASE_URL', 'postgresql://trainer_api:secret@example.com/postgres?sslmode=verify-full&sslrootcert=bundled')
+    monkeypatch.chdir(tmp_path)
+    config = ProfileConfiguration.from_environment()
+    query = parse_qs(urlsplit(config.database_url).query)
+    certificate = Path(query['sslrootcert'][0])
+    assert certificate.is_absolute() and certificate.is_file()
+    assert query['sslmode'] == ['verify-full']
+    assert 'BEGIN CERTIFICATE' in certificate.read_text()
+    from psycopg.conninfo import conninfo_to_dict
+    assert conninfo_to_dict(config.database_url)['sslrootcert'] == str(certificate)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('profile_json', [{'id':True,'login':'valid'},{'id':123,'login':'bad/name'},[],{'id':123}])
 async def test_profile_identity_is_strict_and_upstream_errors_are_private(profile_json):

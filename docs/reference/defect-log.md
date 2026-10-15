@@ -1159,3 +1159,9 @@ read_when:
   effective profile response header. Empty/missing scope and extra-scope regressions are tested;
   removing the first guard produces three expected failures. Account mapping uses the numeric GitHub
   ID rather than an alias or email, preserving ownership through profile renames.
+
+- Supabase shared poolers use the Supabase CA rather than the system trust store. A live
+  restricted-role TLS connection failed with `sslrootcert=system`. Bundle the official public CA
+  and resolve its absolute path independently of the working directory; encode spaces as `%20`,
+  because libpq does not interpret query `+` as a space. A regression parses the final URI using
+  libpq and checks the certificate path, while retaining `sslmode=verify-full`.
