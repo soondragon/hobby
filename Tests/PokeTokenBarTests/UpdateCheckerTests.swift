@@ -56,7 +56,7 @@ final class UpdateCheckerTests: XCTestCase {
     func testFailedCheckDoesNotStartTheCooldown() async {
         var now = Date(timeIntervalSince1970: 1_700_000_000)
         var fetches = 0
-        let checker = UpdateChecker(currentVersion: "2.5.3", clock: { now }, defaults: isolatedDefaults()) {
+        let checker = UpdateChecker(currentVersion: "2.5.3", clock: { now }, defaults: isolatedDefaults(), channel: .upstream) {
             fetches += 1
             return nil
         }
@@ -74,7 +74,7 @@ final class UpdateCheckerTests: XCTestCase {
     func testSuccessfulCheckStartsTheCooldownAndAppliesTheRelease() async {
         var now = Date(timeIntervalSince1970: 1_700_000_000)
         var fetches = 0
-        let checker = UpdateChecker(currentVersion: "2.5.3", clock: { now }, defaults: isolatedDefaults()) {
+        let checker = UpdateChecker(currentVersion: "2.5.3", clock: { now }, defaults: isolatedDefaults(), channel: .upstream) {
             fetches += 1
             return UpdateChecker.LatestRelease(tag: "v2.5.5", url: Self.releaseURL)
         }
@@ -97,7 +97,7 @@ final class UpdateCheckerTests: XCTestCase {
     func testRejectedReleaseUrlDoesNotStartTheCooldown() async {
         var fetches = 0
         let checker = UpdateChecker(currentVersion: "2.5.3", clock: { Date(timeIntervalSince1970: 1_700_000_000) },
-                                    defaults: isolatedDefaults()) {
+                                    defaults: isolatedDefaults(), channel: .upstream) {
             fetches += 1
             return UpdateChecker.LatestRelease(tag: "v2.5.5", url: "http://evil.example/x")
         }
@@ -119,7 +119,7 @@ final class UpdateCheckerTests: XCTestCase {
             var tag = bad
             var fetches = 0
             let checker = UpdateChecker(currentVersion: "2.5.3", clock: { Date(timeIntervalSince1970: 1_700_000_000) },
-                                        defaults: isolatedDefaults()) {
+                                        defaults: isolatedDefaults(), channel: .upstream) {
                 fetches += 1
                 return UpdateChecker.LatestRelease(tag: tag, url: Self.releaseURL)
             }
@@ -149,7 +149,7 @@ final class UpdateCheckerTests: XCTestCase {
     func testOverlappingChecksShareOneFetch() async {
         var fetches = 0
         var release: CheckedContinuation<Void, Never>?
-        let checker = UpdateChecker(currentVersion: "2.5.3", defaults: isolatedDefaults()) {
+        let checker = UpdateChecker(currentVersion: "2.5.3", defaults: isolatedDefaults(), channel: .upstream) {
             fetches += 1
             if fetches == 1 { await withCheckedContinuation { release = $0 } }
             return nil
@@ -172,7 +172,7 @@ final class UpdateCheckerTests: XCTestCase {
         let suite = "UpdateCheckerTests.skip.\(UUID().uuidString)"
         let box = UserDefaults(suiteName: suite)!
         defer { box.removePersistentDomain(forName: suite) }
-        let checker = UpdateChecker(currentVersion: "2.5.3", defaults: box)
+        let checker = UpdateChecker(currentVersion: "2.5.3", defaults: box, channel: .upstream)
 
         checker.consider(latest: "2.5.4", url: "https://github.com/chattymin/PokeTokenBar/releases/tag/v2.5.4")
         XCTAssertEqual(checker.available?.version, "2.5.4")
@@ -203,7 +203,7 @@ final class UpdateCheckerTests: XCTestCase {
         let suite = "UpdateCheckerTests.restore.\(UUID().uuidString)"
         let box = UserDefaults(suiteName: suite)!
         defer { box.removePersistentDomain(forName: suite) }
-        let checker = UpdateChecker(currentVersion: "2.5.3", defaults: box)
+        let checker = UpdateChecker(currentVersion: "2.5.3", defaults: box, channel: .upstream)
         let url = "https://github.com/chattymin/PokeTokenBar/releases/tag/v2.5.4"
         checker.consider(latest: "2.5.4", url: url)
         checker.skipCurrent()

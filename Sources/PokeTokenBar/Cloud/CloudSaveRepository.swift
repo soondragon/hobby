@@ -24,6 +24,6 @@ struct CloudSaveRepository: CloudSaveServing {
     func write(_ command: CloudSaveCommand, token: String) async throws -> CloudSaveReceipt {
         try await transport.request(CloudSaveReceipt.self,
             url: configuration.serviceURL.appendingPathComponent("api/companion"), method: "PUT", token: token,
-            body: JSONEncoder().encode(command))
+            body: CloudSaveWire.encode(command))
     }
 }

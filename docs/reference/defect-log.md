@@ -712,6 +712,37 @@ read_when:
 
 ## 표시·UI
 
+- **화면을 if/else로 갈아 끼우면 내려간 쪽의 `@State`는 Back에서 돌아오지 않는다.** 도감 상세는
+  `CollectionView`에서 격자와 포획 로그를 대신 차지한다. 그래서 Back을 누르면 `DexGridView`가 새로 만들어지고
+  `page`가 0으로 돌아갔다. 3페이지에서 연 포켓몬도 Back 하면 1페이지였다. 포획 로그도 같은 분기라 스크롤이
+  맨 위로 갔다. 필터는 `CollectionView`에 있어서 멀쩡했고, 페이지만 내려가는 쪽에 있었다.
+  **왜 못 걸렀나:** 휠 페이징(#393)과 스프라이트→상세(#394) 테스트는 페이지 이동과 상세 진입을 따로 봤다.
+  상세에서 Back으로 돌아오는 왕복 경로를 밟은 테스트가 없었다.
+  → `CollectionView`가 방금 본 종(`dexReturnAnchor`)과 로그 행(`logReturnAnchor`)을 기억한다. 다시 만들어진
+  격자는 그 종이 있는 페이지에서 시작한다(`DexScrollPager.page(containing:)`).
+  로그는 그 행을 가운데로 스크롤한다. 앵커는 한 번만 쓴다. `LazyVStack`의 첫 `scrollTo`는 아직 안 잰 행
+  높이를 추정치로 써서, 드러난 행이 측정되면 대상이 밀려 한 행 못 미친다. 그래서 측정이 끝난 뒤 한 번 더
+  스크롤한다. 처음엔 한 턴(`Task.yield`) 미뤄 한 번만 스크롤했는데, 로컬은 타이밍이 맞아 통과했고 CI
+  (macOS 15)에서 한 행 못 미쳐 실패했다. 스크롤을 한 번만 하도록 되돌리면 로컬에서도 실패한다.
+  `scrollPosition(id:)`도 시도했지만 macOS 14 API(`anchor:` 없음)는 마지막 행을 맨 위로 올리려다 목록 끝을
+  넘겨 빈 화면을 보였다.
+  격자 앵커는 처음에 Back마다 썼다. 그런데 지우는 곳은 격자의 `onAppear`뿐이라, 로그로 돌아가는 Back
+  (로그 행에서 열었거나 로그 세그먼트에서 Home 스프라이트로 열었을 때)에서는 남았다가 다음에 도감으로
+  전환할 때 소비됐다. 그래서 Back이 격자로 돌아갈 때만 쓴다. 일회성 앵커는 소비할 화면이 확실할 때만 쓴다.
+  또 처음엔 앵커를 격자의 `selectedID` 초기값으로 넣어 페이지를 계산했다. 그러자 #264 이후 화면에서 볼 수
+  없던 선택 테두리와 하단 정보 줄이 Back마다 되살아났고, 스크롤만 돌려놓는 로그와도 달라졌다. 테스트가 이
+  부수 효과를 "선택 유지"라는 의도된 동작으로 단언해서 리뷰에서도 못 걸렀다. 위치 복원용 값은 선택과 다른
+  상태(`DexGridView.returnAnchor`)로 둔다.
+  **부류 스윕:** 팝오버에서 목록→상세→Back 구조는 컬렉션 탭뿐이다. 설정과 리캡은 화면 전체를 덮고 닫으면
+  Home 맨 위로 돌아오는 게 의도한 동작이라 대상이 아니다.
+  **회귀 가드:** `DexBackNavigationTests`는 실제 `CollectionView`를 창에 띄우고 상세→Back 왕복 후 렌더된
+  글자를 Vision으로 읽는다. 앵커 저장, 1회 소비, 로그 앵커를 각각 지우면 실패한다. 격자 앵커를 무조건 쓰게
+  되돌리면 `testBackToTheLogLeavesTheGridOnItsFirstPage`가 실패한다. 앵커로 종을 다시 선택하게 하면
+  `testBackFromDetailReturnsToThePageOfThatSpecies`가 하단 줄의 종 이름을 읽고 실패한다. 접근성 트리는 AX 클라이언트
+  없이는 비어 있어 쓸 수 없다. Back은 AppKit `NSButton`이라 합성 마우스 다운을 보내면 추적 루프가 마우스 업을
+  기다리며 멈추니 `performClick`으로 누른다. 화면 전환 직후엔 뷰 트리가 이전 화면을 히트 테스트해 누름이
+  빠질 수 있어(CI), 화면이 바뀔 때까지 다시 누른다.
+
 - **"재인증하라" 플래그는 성공뿐 아니라 "조회할 로그인이 없음"(nil) 에서도 내린다.** Cursor 401 뒤
   로그아웃·`CURSOR_USAGE_API=0` 이면 `fetch()` 가 던지지 않고 nil 을 주는데, 플래그 해제가
   `if let status` 안에만 있어 재로그인 안내가 재시작까지 남았다. 회귀:
@@ -1018,14 +1049,21 @@ read_when:
 
 ## 알림
 
-- **사탕 재무장도 util dip 만 믿지 마라 — 창 epoch 를 같이 보라.** 지급 key 는 안정
+- **사탕 재무장도 util dip 만 믿지 마라 — 창 epoch 를 같이 보되, 휘발성 지터에 재무장되지 않게 하라.** 지급 key 는 안정
   (`claude.fiveHour`)이어야 알림 dedup 과 같은 이유로 `resets_at` 을 key 에 넣으면 안 된다. 그런데
   재무장을 *오직* utilization&lt;100 관측에만 걸면, Mac 이 리셋 구간을 잠자거나 앱이 꺼져 있는 동안
   창이 바뀌고 다음 poll 이 다시 100%면 `candyGrantTier` 가 영원히 1 로 남아 "한도를 여러 번
   찍었는데 사탕이 안 온다"가 된다(#326). 해결: `candyWindowEpoch[key]=resets_at` 을 영속하고, 같은
   key 에서 epoch 가 바뀌면 util 과 무관하게 tier 를 비운 뒤 100%면 재지급. nil→첫 epoch 는 재무장이
-  아니다(구세이브 업그레이드 폭탄 방지). 회귀: `testRearmWhenWindowEpochAdvancesWhileStillAt100`·
-  `testGrantAfterSeedWhenEpochAdvancesWithoutUtilDip`·`testLearningEpochForFirstTimeDoesNotRegrant`.
+  아니다(구세이브 업그레이드 폭탄 방지).
+  **그러나 날 것의 epoch 문자열을 단순 `!=` 로 비교하면 안 된다**: Anthropic API 가 매 응답 새로 매기는
+  마이크로초(`...00.928794` vs `...00.935515`)나 Codex app-server 의 ±1s 지터, 롤링 5h 창의 분 단위 드리프트로
+  인해 매 poll(60초)마다 새 epoch 로 오판되어 100% 상태에서 사탕이 매분 무한 지급되는 결함이 터졌다.
+  방지: ① `UsageStore` 에서 ISO8601 초 단위 정규화로 마이크로초 휘발성 제거, ② `CompanionStore.isNewEpoch` 에서
+  타임스탬프 차이를 파싱해 창 규모(세션 ≥30분, 주간 ≥24시간) 이상 전진했을 때만 실제 리셋으로 인정(지터·1분 드리프트 차단).
+  회귀 가드: `testRearmWhenWindowEpochAdvancesWhileStillAt100`·`testGrantAfterSeedWhenEpochAdvancesWithoutUtilDip`·
+  `testLearningEpochForFirstTimeDoesNotRegrant`·`testVolatileMicrosecondEpochDoesNotRegrant`·
+  `testCodexJitterEpochDoesNotRegrant`·`testRollingWindowMinorDriftDoesNotRegrant`·`testSessionFullResetWhileStillAt100Regrants`.
 
 - **휘발성 필드를 dedup/identity 키에 쓰지 마라.** 매 fetch/refresh 마다 값이 변하는 필드(예: rolling
   한도 창의 `resets_at`)를 알림 중복방지 키에 넣으면 매번 새 키가 되어 dedup 이 무력화된다 — 주간 한도
@@ -1185,3 +1223,9 @@ read_when:
 - Installing a signed app by merging over an older app can retain obsolete resources not present in the new signature seal. Replace the complete app directory (keep a temporary rollback copy) and verify the installed signature, rather than treating a successful copy as installation proof.
 
 - Authentication cancellation, browser-start failure, callback mismatch, token-exchange rejection and expired refresh credentials previously collapsed into one generic retry message. Preserve the failure phase through the XPC-safe one-shot completion and HTTP transport. Background cancellation regression tests ensure a late callback cannot resume twice. A live 2026-10-16 browser flow reached GitHub authorization and returned 401 at the server exchange; old email authorization was separately observed and must not be mistaken for the proven cause of that 401. Configuration/provider diagnostics use only allowlisted error categories, never provider descriptions or tokens.
+
+## Fork release isolation and form wire compatibility (2026-10-16)
+
+The shared updater queried the upstream release and detected the upstream Homebrew cask globally, even from a separately installed cloud bundle. This could terminate the fork and upgrade/start the upstream application. Select release ownership from bundle identity; validate the repository at fetch, consideration and application boundaries; prohibit Homebrew upgrades for cloud/unknown bundles. `AppUpdateChannelTests` reproduces the newer-upstream-release trigger and rejects it.
+
+The general-form upstream migration changes encoded field names while the deployed server uses a strict schema. Keep domain migration separate from the wire contract through `CloudSaveWire`; test legacy decoding, default identity stability, and front/back sprite cache separation. Do not loosen server validation to accommodate an unreviewed client model change.

@@ -41,9 +41,9 @@ struct EncounterSprite: View {
         .task(id: pokemon) {
             image = nil; failed = false
             guard let pokemon else { return }
-            let form = pokemon.unownForm.flatMap(UnownForm.init(rawValue:))
+            let form = pokemon.unownForm.map { PokemonForm($0) }
             let data = await SpriteStore.shared.data(speciesID: pokemon.speciesID, animated: false,
-                                                       shiny: pokemon.isShiny, unownForm: form, back: back)
+                                                       shiny: pokemon.isShiny, form: form, back: back)
             guard !Task.isCancelled else { return }
             image = data.flatMap(NSImage.init(data:)); failed = image == nil
         }

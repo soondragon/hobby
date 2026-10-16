@@ -26,6 +26,7 @@ final class UpdateChecker {
     private(set) var skipped: Available?
     private(set) var isUpdating = false
 
+    let channel: AppUpdateChannel
     let currentVersion: String
     private let clock: () -> Date
     private let defaults: UserDefaults
@@ -39,12 +40,13 @@ final class UpdateChecker {
     static let skippedVersionKey = "skippedUpdateVersion"
 
     init(currentVersion: String? = nil, clock: @escaping () -> Date = Date.init, defaults: UserDefaults = .standard,
-         fetchLatest: (() async -> LatestRelease?)? = nil) {
+         channel: AppUpdateChannel = .installed(), fetchLatest: (() async -> LatestRelease?)? = nil) {
         self.currentVersion = currentVersion
             ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0"
+        self.channel = channel
         self.clock = clock
         self.defaults = defaults
-        self.fetchLatest = fetchLatest ?? { await Self.liveLatestRelease(repo: "chattymin/PokeTokenBar") }
+        self.fetchLatest = fetchLatest ?? { await Self.liveLatestRelease(repo: channel.repository) }
     }
 
     var settingsNotice: SettingsNotice {
@@ -66,7 +68,7 @@ final class UpdateChecker {
         defer { checkInFlight = false }
 
         guard let release = await fetchLatest(),
-              Self.isTrustedReleaseURL(release.url),
+              channel.accepts(release.url),
               let version = Self.normalizedReleaseVersion(release.tag) else { return }
         lastChecked = clock()
         consider(latest: version, url: release.url)
@@ -108,6 +110,7 @@ final class UpdateChecker {
 
     /// Apply one fetched release. `latest` may be a tag (`v2.5.4`) or a bare version.
     func consider(latest tag: String, url: String) {
+        guard channel.accepts(url) else { return }
         let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
         let skippedVersion = defaults.string(forKey: Self.skippedVersionKey)
         guard Self.isNewer(latest, than: currentVersion) else {
@@ -144,12 +147,13 @@ final class UpdateChecker {
 
     /// 업데이트 적용: brew cask 설치본이면 `brew upgrade` 후 재시작, 아니면 릴리스 페이지.
     func applyUpdate() {
-        guard let update = updateTarget, !isUpdating else { return }
+        guard let update = updateTarget, channel.accepts(update.url), !isUpdating else { return }
         isUpdating = true
         Task { @MainActor in
             // brew cask 설치본이면 분리(detached) 스크립트가 앱 종료 후 tap 갱신→업그레이드→재오픈.
             // 그 외(brew 미설치/비-cask 설치)면 릴리스 페이지를 연다.
-            let brew = await Task.detached { Self.brewCaskPath() }.value
+            let brew = channel.allowsHomebrewUpgrade
+                ? await Task.detached { Self.brewCaskPath() }.value : nil
             if let brew {
                 Self.launchDetachedUpgrade(brew: brew)
                 NSApp.terminate(nil)
