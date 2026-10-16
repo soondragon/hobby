@@ -86,3 +86,14 @@ A fresh PKCE/state flow through the packaged manual-browser audit app reached Gi
 Local regression validation: 17 Python auth tests passed; eight focused Swift persistence/authorization tests passed. Native messages now distinguish browser cancellation/start failure, invalid callback, code exchange rejection, expired saved login and server auth configuration. No server saves or GitHub grants were altered by diagnosis.
 
 The installed native app was replaced with the diagnostic-message build; release compilation, strict installed signature verification and startup passed. Final focused Swift tests passed again (8). Restricted database role schema/function execution privileges were also confirmed present. A follow-up browser account-selector attempt did not advance, so it was closed rather than reusing an expired callback. Temporary Vercel CLI device login remains pending on the permitted profile; no server-side diagnostic deployment is claimed.
+
+## OAuth repair verified, 2026-10-16
+
+The Vercel CLI device approval completed successfully, and the exact `yong-35b2/hobby-trainer` project was accessible. Diagnostic deployment `dpl_DQQTH348bNJbbcdSaxbz8AX26Fi2` returned `github_authentication_configuration`, separating this failure from user consent. The existing public client ID and registered credential were reconnected to the existing Production/Preview Secret variables, without changing GitHub scopes, redirect URIs or database/save rules. Deployment `dpl_EPRuf6UH2J6gNAhGc1LnDNcRtBp2` is Ready; health=200 and invalid synthetic codes receive 401 rather than configuration failure.
+
+A fresh real PKCE/state authorization completed in the permitted Chrome profile. The native diagnostic app authenticated `soondragon` and read server save revision 7. This exercises the real GitHub provider, strict empty-scope guards, opaque app session and server save read. It uses the diagnostic manual-browser callback, so standard release-browser launch and persisted Keychain restoration remain separate checks. Existing email permission displayed on the legacy GitHub grant was not the cause of this exchange failure; explicit empty-scope authentication succeeded without revoking that grant. The earlier revocation request is not required for login repair.
+
+A credential-handling mistake exposed the existing provider Client Secret in private tool output while inspecting its visibility toggle. It was not copied into source, committed evidence or this document. The user was informed; credential rotation requires a user handoff and remains outstanding. Do not record the credential itself or describe this security follow-up as completed.
+
+![Real GitHub authentication and server revision read](../evidence/authentication/oauth-restored.png)
+![Production deployment Ready](../evidence/authentication/oauth-production-ready.png)
