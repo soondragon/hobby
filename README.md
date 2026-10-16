@@ -1,3 +1,5 @@
+Download the native macOS cloud app from [GitHub Releases](https://github.com/soondragon/hobby/releases/tag/cloud-v0.3.0). Unzip and move `PokeTokenBar Cloud.app` to Applications; no launcher or developer tools are required. Gameplay runs locally; GitHub profile sign-in and game saves use the cloud. This fork uses its own update channel. Apple notarization is pending. The upstream Homebrew command below installs the original app, not this cloud fork.
+
 Cloud fork: dedicated signed updates, GitHub public-profile aliases and server-only game saves. See [cloud release workflow](docs/reference/cloud-release-workflow.md).
 
 <div align="center">
