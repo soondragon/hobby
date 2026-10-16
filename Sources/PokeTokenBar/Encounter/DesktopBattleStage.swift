@@ -25,6 +25,8 @@ final class DesktopBattleStage {
     private var demoID = 0
 
     init(settings: @escaping () -> Void, hide: @escaping () -> Void) {
+        _ = MoveDefinitions.all
+        _ = SkillSpriteSheet.frames
         own = EncounterWindowStyle.floatingPanel(size: NSSize(width: 240, height: 290))
         opponent = EncounterWindowStyle.floatingPanel(size: NSSize(width: 240, height: 290))
         effects = EncounterWindowStyle.floatingPanel()

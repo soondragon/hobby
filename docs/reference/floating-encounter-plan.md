@@ -138,3 +138,17 @@ The previous procedural gradient beams were replaced with six-frame pixel sheets
 Validation: five focused skill tests passed; actual packaged preview cast, release build, strict installed signature verification and main account-window startup passed. No backend deployment was needed for this presentation-only change.
 
 ![Reference composition with pixel skills, actual local sample](../evidence/skill-effects/pixel-reference-render.png)
+
+## Canonical move presentation registry (2026-10-16)
+
+`MoveDefinitions` resolves the 559 supported move IDs to immutable identity, Gen V base values, description, reference traits and presentation settings. `scripts/sync-skill-definitions.py` pins the same PokéAPI revision and records SHA-256 hashes for move_meta, ailments, stat changes and stat names. Meta traits are source-snapshot reference information, not historically versioned Gen V combat rules; no status chances, HP, PP consumption, rewards or stat changes are executed.
+
+`SkillEffectRenderer` accepts only moveID and geometry/timeline/scale/intensity parameters. Pokémon ownership and legal move checks remain on the existing server. Event-supplied type/name cannot override the local canonical palette. Unknown IDs draw nothing. Source and destination are passed per individual; target semantics come from the shared definition. ID overrides distinguish Flamethrower stream, Fire Spin vortex, Surf wave, Thunder strike, weather and defensive effects; other moves use explicitly shared category templates. This is not 559 bespoke animations.
+
+The generic blue impact sheet caused the fire-color mismatch. `SkillTint` creates immutable type-colored frames once at stage startup, used for both flight and impact. Fire never renders a blue splash; ice no longer shares the water palette. The example now casts the own Pokémon's special move alone; simultaneous casting remains an explicit demo control. The reference composition is unchanged.
+
+Validation: seven focused native tests passed, including complete 559-ID decoding, representative move traits/styles, unknown-ID rejection and real fire-frame palette inspection. The packaged preview was launched and its isolated #53 Flamethrower render and tooltip inspected.
+
+![Canonical #53 fire render, actual local sample](../evidence/skill-effects/move-id-fire.png)
+
+Release build, complete app replacement, strict installed code-signature verification and account-window startup passed. This remains a locally signed app. Server deployment and game-save data were unchanged.

@@ -13,6 +13,7 @@ struct EncounterMove: Codable, Sendable, Equatable, Identifiable {
     let priority: Int
     let target: String
     let description: String
+    var referenceDetails: String { MoveDefinitions.find(id)?.details ?? description }
     var summary: String { "\(typeKo) · 위력 \(power.map(String.init) ?? "—") · 명중 \(accuracy.map(String.init) ?? "—") · PP \(pp)" }
 }
 struct EncounterSkillList: Decodable, Sendable { let moves: [EncounterMove] }

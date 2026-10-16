@@ -18,6 +18,11 @@ enum SkillSpriteSheet {
                 sheet.cropping(to: CGRect(x: $0 * side, y: 0, width: side, height: side))
             }
         }
+        for (name,sequence) in result {
+            for type in SkillTint.colors.keys {
+                result[type + ":" + name] = sequence.compactMap { SkillTint.image($0,type: type) }
+            }
+        }
         return result
     }()
     static func key(type: String, damageClass: String) -> String {
@@ -30,8 +35,9 @@ enum SkillSpriteSheet {
         }
     }
     static func draw(_ key: String, in context: inout GraphicsContext, at point: CGPoint,
-                     size: CGFloat, frame: Int, angle: Double = 0, opacity: Double = 1) {
-        guard let sequence = frames[key], !sequence.isEmpty else { return }
+                     size: CGFloat, frame: Int, angle: Double = 0, opacity: Double = 1, type: String? = nil) {
+        let resolved = type.map { $0 + ":" + key } ?? key
+        guard let sequence = frames[resolved], !sequence.isEmpty else { return }
         let image = sequence[max(0,frame) % sequence.count]
         var layer = context
         layer.opacity = opacity

@@ -13,6 +13,38 @@ final class SkillEffectsTests: XCTestCase {
             XCTAssertNotEqual(frames[0].alphaInfo,.none)
         }
     }
+    func testCanonicalMoveIDsResolveDistinctBehaviorAndReferenceTraits() throws {
+        XCTAssertEqual(MoveDefinitions.all.count,559)
+        let flame = try XCTUnwrap(MoveDefinitions.find(53))
+        XCTAssertEqual(flame.type,"fire")
+        XCTAssertEqual(flame.power,95)
+        XCTAssertEqual(flame.presentation.style,.stream)
+        XCTAssertEqual(flame.traits.ailment,"burn")
+        XCTAssertEqual(flame.traits.ailment_chance,10)
+        XCTAssertEqual(MoveDefinitions.find(83)?.presentation.style,.vortex)
+        XCTAssertEqual(MoveDefinitions.find(57)?.presentation.style,.wave)
+        XCTAssertEqual(MoveDefinitions.find(87)?.presentation.style,.strike)
+        XCTAssertEqual(MoveDefinitions.find(334)?.traits.statChanges.first?.change,2)
+        XCTAssertTrue(MoveDefinitions.find(334)?.targetsUser == true)
+        XCTAssertNil(MoveDefinitions.find(999999))
+    }
+    func testFireImpactFramesNeverKeepTheBlueWaterPalette() throws {
+        for name in ["fire:fire","fire:impact","fire:magic"] {
+            let frames = try XCTUnwrap(SkillSpriteSheet.frames[name])
+            for frame in frames {
+                let image = NSBitmapImageRep(cgImage: frame)
+                var visible = 0
+                for y in 0..<image.pixelsHigh {
+                    for x in 0..<image.pixelsWide {
+                        guard let color = image.colorAt(x: x,y: y)?.usingColorSpace(.deviceRGB),color.alphaComponent > 0.1 else { continue }
+                        visible += 1
+                        XCTAssertGreaterThanOrEqual(color.redComponent+0.02,color.blueComponent)
+                    }
+                }
+                XCTAssertGreaterThan(visible,0)
+            }
+        }
+    }
     private func room(event: EncounterSkillEvent, serverTime: Double) -> EncounterRoom {
         .init(id: UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!,revision: 5,closed: false,
               members: [.init(isSelf: true,alias: "trainer",pokemon: nil)],inviteCode: nil,serverTime: serverTime,events: [event])

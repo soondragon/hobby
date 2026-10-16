@@ -11,5 +11,6 @@ import plistlib,sys
 with open(sys.argv[1],'wb') as file:
  plistlib.dump({'CFBundleIdentifier':'io.github.soondragon.hobby.encounter.preview','CFBundleName':'Floating Encounter Preview','CFBundleExecutable':'PokeTokenBar','CFBundlePackageType':'APPL','EncounterPreviewOnly':True,'NSHighResolutionCapable':True},file)
 PY
+cp Sources/PokeTokenBar/Resources/MoveDefinitions.json "$TRAINER_APP/Contents/Resources/"
 cp -R Sources/PokeTokenBar/Resources/BattleSpells "$TRAINER_APP/Contents/Resources/"
 codesign --force -s - "$TRAINER_APP"

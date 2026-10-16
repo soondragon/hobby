@@ -66,7 +66,7 @@ struct EncounterPanelView: View {
                         Spacer()
                         Button("시전") { Task { await controller.attack(move) } }
                             .disabled(!controller.connected || controller.room?.members.filter({ $0.pokemon != nil }).count != 2)
-                    }.help(move.description)
+                    }.help(move.referenceDetails)
                 }
             }
             Text("내 서버 포켓몬만 선택할 수 있어요. 선택 정보만 공유되며 성장 데이터는 바뀌지 않습니다.")

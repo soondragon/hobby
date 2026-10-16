@@ -93,7 +93,8 @@ private struct PreviewSkillControls: View {
             Divider()
             HStack {
                 Button("동시 시전") { counterAttack() }
-                Button("예시 정지 화면") { stage.state.frozenProgress = 0.52;counterAttack();inspect() }
+                Button("예시 정지 화면") { stage.state.frozenProgress = 0.52;stage.state.playbacks = [];
+                    if let move = model.catalog.skills(speciesID: model.ownSpecies,level: model.level).first(where: { $0.damageClass == "special" }) { stage.demo(move: move,actorIsSelf: true) };inspect() }
                 Button("실시간 재생") { stage.resumeDemo() }
                 Button("검수 화면") { inspect() }
             }
@@ -108,7 +109,7 @@ private struct PreviewSkillControls: View {
                 VStack(alignment: .leading,spacing: 3) {
                     HStack { Text(move.nameKo).bold();Spacer();Button("시전") { stage.demo(move: move,actorIsSelf: isSelf) } }
                     Text(move.summary).font(.caption2).foregroundStyle(.secondary)
-                }.help(move.description)
+                }.help(move.referenceDetails)
             }
         }.frame(maxWidth: .infinity)
     }

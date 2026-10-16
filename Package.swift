@@ -8,7 +8,7 @@ let package = Package(
         .executableTarget(
             name: "PokeTokenBar",
             path: "Sources/PokeTokenBar",
-            resources: [.copy("Resources/BattleSpells")],
+            resources: [.copy("Resources/BattleSpells"), .copy("Resources/MoveDefinitions.json")],
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .testTarget(
