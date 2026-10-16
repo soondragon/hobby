@@ -12,3 +12,7 @@ The cloud release channel is independent of the upstream workflow. Do not run th
 8. Promote the tested build; recheck canonical feed and archive hash. Never upload env files, tokens, private signing keys or credential traces. Log out temporary CLI credentials afterward.
 
 The updater waits for normal process exit and never kills the app to bypass pending-save protection. Failure restores the previous bundle. Game saves are not exported to local files during recovery or update.
+
+## GitHub direct installation
+
+Publish the verified native ZIP to `soondragon/hobby` Releases with a `cloud-v<version>` tag targeting the exact source commit. Version 0.3.0 is tagged at `34b9fc12a89119b3480757eda0c99017db4c717e`. Users download, unzip, and move the app to Applications; no launcher or developer runtime is required. Repository visibility stays private, so release downloads require repository access. The server-hosted signed feed remains independent and continues serving the same verified archive. Do not point this fork at the upstream Homebrew cask.

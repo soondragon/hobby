@@ -1,5 +1,12 @@
 클라우드 브랜치: 전용 서명 업데이트, GitHub 공개 프로필 alias, 서버 전용 게임 저장을 사용합니다. [배포 절차](docs/reference/cloud-release-workflow.md)를 참고하세요.
 
+### 클라우드 앱 설치
+
+[우리 앱의 GitHub Release 0.3.0](https://github.com/soondragon/hobby/releases/tag/cloud-v0.3.0)에서 ZIP을 다운로드하고 압축을 푼 뒤, `PokeTokenBar Cloud.app`을 Applications 폴더로 옮겨 실행합니다. 별도 런처나 개발 도구 설치는 필요 없습니다. 현재 저장소는 비공개이므로 저장소 접근 권한이 있어야 다운로드할 수 있습니다.
+
+게임 화면·도감·포켓몬·애니메이션은 설치된 Mac 앱에서 실행됩니다. 로그인과 게임 세이브는 서버를 사용하며, 로컬 세이브파일은 사용하지 않습니다. 전용 업데이트 피드를 유지하므로 원본 앱으로 교체되지 않습니다. 아래 원본 Homebrew 명령은 클라우드 앱 설치에 사용하지 마세요. Apple 공증 전 테스트 배포입니다.
+
+
 <div align="center">
 
 <img src="assets/icon.png" width="128" alt="PokeTokenBar 아이콘">
