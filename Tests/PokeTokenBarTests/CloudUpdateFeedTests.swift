@@ -30,6 +30,19 @@ final class CloudUpdateFeedTests: XCTestCase {
         XCTAssertThrowsError(try CloudUpdateFeed.verify(signed(key, url: "https://github.com/chattymin/PokeTokenBar/releases/tag/v9.0.0"), publicKey: publicKey))
     }
 
+    func testCancelledQuitStopsHelperWithoutMovingTheApplication() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = root.appendingPathComponent("existing.app")
+        try Data("existing installation".utf8).write(to: target)
+        let installation = CloudUpdateInstallation(candidate: root.appendingPathComponent("candidate.app"), target: target, workspace: root)
+        let helper = try installation.launch(after: ProcessInfo.processInfo.processIdentifier)
+        helper.terminate(); helper.waitUntilExit()
+        XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "existing installation")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("previous.app").path))
+    }
+
     func testInstallScriptWaitsWithoutKillingAndHasRollback() {
         XCTAssertTrue(CloudUpdateInstallation.script.contains("kill -0"))
         XCTAssertFalse(CloudUpdateInstallation.script.contains("kill -9"))

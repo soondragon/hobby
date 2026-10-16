@@ -6,13 +6,14 @@ struct CloudUpdateInstallation: Sendable {
     let target: URL
     let workspace: URL
 
-    func launch(after pid: Int32) throws {
+    func launch(after pid: Int32) throws -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", Self.script, "sh", candidate.path, target.path, workspace.appendingPathComponent("previous.app").path, String(pid)]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
+        return process
     }
 
     // Never force-kill a process with pending saves. Keep the previous bundle for recovery.

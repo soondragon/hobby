@@ -163,8 +163,12 @@ final class UpdateChecker {
                     guard let package = update.package else { throw CloudError.invalidResponse }
                     let installation = try await CloudUpdateInstaller.prepare(package)
                     guard canInstall() else { throw CloudError.locked }
-                    try installation.launch(after: ProcessInfo.processInfo.processIdentifier)
+                    let helper = try installation.launch(after: ProcessInfo.processInfo.processIdentifier)
                     NSApp.terminate(nil)
+                    // terminate returns only when the synchronous pending-save dialog cancels exit.
+                    if helper.isRunning { helper.terminate() }
+                    isUpdating = false
+                    updateError = "업데이트가 취소되었습니다. 서버 저장을 완료한 뒤 다시 시도해 주세요."
                 } catch { updateError = "업데이트를 확인하거나 설치하지 못했습니다. 기존 앱은 유지됩니다."; isUpdating = false }
                 return
             }

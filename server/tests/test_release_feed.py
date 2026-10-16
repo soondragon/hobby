@@ -26,6 +26,9 @@ async def test_public_feed_and_exact_download_without_account_access(tmp_path):
         response = await client.get('/downloads/cloud/'+name)
         assert response.status_code == 200 and response.content == content
         assert response.headers['content-type'] == 'application/zip'
+        older = 'trainer-0.2.0-' + hashlib.sha256(b'older').hexdigest() + '.zip'
+        (tmp_path/older).write_bytes(b'older')
+        assert (await client.get('/downloads/cloud/'+older)).content == b'older'
         assert (await client.get('/downloads/cloud/private.env')).status_code == 404
     (tmp_path/name).write_bytes(b'wrong-size')
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:

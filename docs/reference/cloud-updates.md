@@ -37,3 +37,8 @@ Final backend regression run: 64 tests passed on the disposable local PostgreSQL
 ![Existing pending save recovered](../evidence/authentication/pending-save-recovered.png)
 ![New installed app restored from Keychain](../evidence/authentication/cloud-release-restored.png)
 ![Staged download page, not final canonical promotion](../evidence/authentication/cloud-release-preview.png)
+
+
+Final candidate supersedes the earlier stage: `dpl_4YKBd7XaXwJeQpxw63noPahjAKBv`, `https://hobby-trainer-2icyofzgl-yong-35b2.vercel.app/app`. Its signed archive SHA-256 is `ca16dd6675fad75ff5a23b1c87a779d44375501baa6a6f4a945820c4d47ea979` (3497994 bytes). The downloaded staging archive matches the metadata; six final signature/archive/cancel tests pass. The installer now terminates its own helper if the synchronous pending-save exit dialog cancels termination, leaving the existing installation intact. Retained immutable archive URLs remain downloadable across a feed promotion.
+
+The new app's real automatic Retry-After request completed without manual retry through server revision 21. The final installed binary exactly matches the final archive source, completed a fresh GitHub login through revision 25, and restored/saved through revision 26 after normal quit/relaunch. It is left connected. Canonical final package/feed promotion still awaits the explicit cloud version confirmation; the recovery API remains live. Temporary deployment CLI credentials are logged out/removed when handing off that confirmation.

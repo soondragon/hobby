@@ -40,7 +40,12 @@ def router(directory: Path | None = None):
     def download(filename: str):
         _, expected, file = current()
         if filename != expected:
-            raise HTTPException(404, 'release_not_found')
+            # Retained immutable packages must survive a feed promotion during a download.
+            if not re.fullmatch(r'trainer-[0-9]+\.[0-9]+\.[0-9]+-[a-f0-9]{64}\.zip', filename):
+                raise HTTPException(404, 'release_not_found')
+            file = root / filename
+            if not file.is_file() or not 0 < file.stat().st_size <= 64_000_000:
+                raise HTTPException(404, 'release_not_found')
 
         def chunks():
             with file.open('rb') as stream:
