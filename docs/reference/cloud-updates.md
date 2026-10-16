@@ -42,3 +42,15 @@ Final backend regression run: 64 tests passed on the disposable local PostgreSQL
 Final candidate supersedes the earlier stage: `dpl_4YKBd7XaXwJeQpxw63noPahjAKBv`, `https://hobby-trainer-2icyofzgl-yong-35b2.vercel.app/app`. Its signed archive SHA-256 is `ca16dd6675fad75ff5a23b1c87a779d44375501baa6a6f4a945820c4d47ea979` (3497994 bytes). The downloaded staging archive matches the metadata; six final signature/archive/cancel tests pass. The installer now terminates its own helper if the synchronous pending-save exit dialog cancels termination, leaving the existing installation intact. Retained immutable archive URLs remain downloadable across a feed promotion.
 
 The new app's real automatic Retry-After request completed without manual retry through server revision 21. The final installed binary exactly matches the final archive source, completed a fresh GitHub login through revision 25, and restored/saved through revision 26 after normal quit/relaunch. It is left connected. Canonical final package/feed promotion still awaits the explicit cloud version confirmation; the recovery API remains live. Temporary deployment CLI credentials are logged out/removed when handing off that confirmation.
+
+
+## Final production release 0.3.0, 2026-10-16
+
+The user explicitly approved 0.3.0. Deployment `dpl_4YKBd7XaXwJeQpxw63noPahjAKBv` was promoted to `https://hobby-trainer.vercel.app`. The canonical `/app` page and `/api/app-release` now publish 0.3.0. The live envelope's Ed25519 signature was verified against the app's pinned public key; the canonical downloaded archive matches 3497994 bytes and SHA-256 `ca16dd6675fad75ff5a23b1c87a779d44375501baa6a6f4a945820c4d47ea979`.
+
+The actual installation was replaced with that canonical downloaded package and passed strict code-signature verification. Fresh GitHub login completed as @soondragon and server save revision 33. After normal quit/relaunch, Keychain restore loaded revision 33 and the next server save completed at revision 34. No local game save was imported or exported.
+
+A local version-only 0.2.9 bootstrap was tried to exercise the native update UI. The application's standard Settings scene is empty (the upstream settings are hosted inside the menu-bar popover), and the menu-bar entry was not reachable through this automation session. Consequently, a live update-button-to-helper replacement is **not claimed as verified**. The bootstrap was normally quit and replaced by the exact public 0.3.0 archive before the final login/restore checks. Existing focused signature/archive/installer tests remain the automated coverage for that path. Apple notarization remains pending; this is an ad hoc signed test distribution.
+
+![Canonical production release](../evidence/authentication/cloud-030-production.png)
+![Actual installed app restored and saved](../evidence/authentication/cloud-030-restored.png)
