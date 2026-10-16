@@ -1,4 +1,5 @@
 import Foundation
+import AuthenticationServices
 
 /// AuthenticationServices calls this from an XPC queue, not the MainActor.
 /// The lock protects the one-shot continuation, including a failed start racing cancellation.
@@ -9,10 +10,13 @@ final class CloudBrowserCompletion: @unchecked Sendable {
     init(_ continuation: CheckedContinuation<URL, Error>) { self.continuation = continuation }
 
     var handler: @Sendable (URL?, (any Error)?) -> Void {
-        { [self] url, _ in finish(url: url) }
+        { [self] url, error in
+            let cancelled = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
+            finish(url: url, failure: cancelled ? .loginCancelled : .browserUnavailable)
+        }
     }
 
-    func finish(url: URL?) {
+    func finish(url: URL?, failure: CloudError = .authentication) {
         let pending = lock.withLock {
             let pending = continuation
             continuation = nil
@@ -20,6 +24,6 @@ final class CloudBrowserCompletion: @unchecked Sendable {
         }
         guard let pending else { return }
         if let url { pending.resume(returning: url) }
-        else { pending.resume(throwing: CloudError.authentication) }
+        else { pending.resume(throwing: failure) }
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import AuthenticationServices
 import XCTest
 @testable import PokeTokenBar
 
@@ -15,6 +16,19 @@ final class CloudPersistenceTests: XCTestCase {
             }
         }
         XCTAssertEqual(actual, expected)
+    }
+
+    func testBrowserCancellationReportsCancellationInsteadOfGenericAuthentication() async {
+        do {
+            let _: URL = try await withCheckedThrowingContinuation { continuation in
+                let callback = CloudBrowserCompletion(continuation)
+                DispatchQueue.global().async {
+                    callback.handler(nil,ASWebAuthenticationSessionError(.canceledLogin))
+                    callback.finish(url: nil)
+                }
+            }
+            XCTFail("Expected cancellation")
+        } catch { XCTAssertEqual(error as? CloudError,.loginCancelled) }
     }
 
     func testCloudStartupNeverReadsOrWritesLocalSaveAndBlocksGameplay() throws {

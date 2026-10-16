@@ -13,6 +13,7 @@ with open(sys.argv[1],'wb') as output:
     plistlib.dump(dict(CFBundleIdentifier='io.github.soondragon.hobby.security',
         CFBundleName='Trainer Security Audit',CFBundleExecutable='PokeTokenBar',
         CFBundlePackageType='APPL',SecurityAuditOnly=True,
+        LSEnvironment={"TRAINER_PROFILE_MANUAL_BROWSER":"1"},
         CFBundleURLTypes=[dict(CFBundleURLSchemes=['hobbytrainer'])]),output)
 PY
 codesign --force -s - "$TRAINER_APP"

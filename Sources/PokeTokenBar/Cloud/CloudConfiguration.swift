@@ -27,9 +27,15 @@ struct CloudConfiguration: Codable, Sendable {
 }
 
 enum CloudError: Error, LocalizedError, Equatable {
-    case configuration, authentication, transport, invalidResponse, conflict, missingSave, locked, storage, growthRejected, rateLimited, publicProfileOnly
+    case configuration, authentication, transport, invalidResponse, conflict, missingSave, locked, storage, growthRejected, rateLimited, publicProfileOnly, loginCancelled, browserUnavailable, invalidCallback, githubExchangeRejected, sessionExpired, serverAuthenticationConfiguration
     var errorDescription: String? {
         switch self {
+        case .loginCancelled: "GitHub 로그인이 취소되었습니다. 다시 로그인해 주세요."
+        case .browserUnavailable: "로그인 브라우저를 시작하지 못했습니다. Chrome이 실행 가능한지 확인해 주세요."
+        case .invalidCallback: "로그인 응답이 현재 요청과 일치하지 않습니다. 이전 로그인 창을 닫고 다시 시도해 주세요."
+        case .githubExchangeRejected: "GitHub 인증 코드 교환에 실패했습니다. 로그인 창을 새로 열어 다시 시도해 주세요."
+        case .serverAuthenticationConfiguration: "서버의 GitHub 인증 설정을 확인해야 합니다. 반복 로그인 대신 설정 수정이 필요합니다. 서버 세이브는 유지됩니다."
+        case .sessionExpired: "저장된 로그인 연결이 만료되었습니다. ‘GitHub 로그인’으로 다시 연결해 주세요."
         case .configuration: "클라우드 연결 설정이 필요합니다."
         case .publicProfileOnly: "기존 GitHub 승인에 이메일 등 추가 권한이 남아 있습니다. GitHub의 앱 승인 설정에서 이전 연결을 해제한 뒤 다시 로그인해 주세요."
         case .authentication: "GitHub 로그인을 다시 확인해 주세요."

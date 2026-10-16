@@ -23,6 +23,13 @@ class GitHubProfileProvider:
                     'client_id': self.configuration.client_id, 'client_secret': self.configuration.client_secret,
                     'code': code, 'code_verifier': verifier, 'redirect_uri': self.configuration.redirect_uri})
             body = response.json()
+            # Return only allowlisted diagnostics, never provider descriptions or credentials.
+            if isinstance(body,dict) and body.get('error'):
+                if body['error'] in ('incorrect_client_credentials','redirect_uri_mismatch'):
+                    raise HTTPException(503,'github_authentication_configuration')
+                if body['error'] == 'incorrect_code_verifier':
+                    raise HTTPException(401,'github_pkce_verification_failed')
+                raise HTTPException(401,'github_authentication_failed')
             # Reject old grants that GitHub may silently carry over from a previous authorization.
             if not isinstance(body, dict) or response.status_code != 200 or body.get('error') or not body.get('access_token'):
                 raise HTTPException(401, 'github_authentication_failed')

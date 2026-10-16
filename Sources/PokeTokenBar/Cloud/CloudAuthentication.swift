@@ -59,7 +59,7 @@ final class CloudAuthentication: NSObject, ASWebAuthenticationPresentationContex
             // Use the user's configured browser rather than choosing another Chrome profile.
             session.prefersEphemeralWebBrowserSession = false
             browserSession = session
-            if !session.start() { completion.finish(url: nil) }
+            if !session.start() { completion.finish(url: nil,failure: .browserUnavailable) }
         }
     }
 

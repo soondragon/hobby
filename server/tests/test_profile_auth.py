@@ -79,3 +79,21 @@ async def test_profile_identity_is_strict_and_upstream_errors_are_private(profil
         with pytest.raises(HTTPException) as error:await provider.exchange('private-code','v'*43)
         assert error.value.status_code==401
         assert 'secret-token' not in error.value.detail and 'private-code' not in error.value.detail
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure,status,detail', [
+    ('incorrect_client_credentials',503,'github_authentication_configuration'),
+    ('redirect_uri_mismatch',503,'github_authentication_configuration'),
+    ('incorrect_code_verifier',401,'github_pkce_verification_failed'),
+    ('bad_verification_code',401,'github_authentication_failed'),
+    ('unknown_private_value',401,'github_authentication_failed')])
+async def test_provider_errors_are_classified_without_exposing_response_secrets(failure,status,detail):
+    async def handler(request):
+        return httpx.Response(200,json={'error':failure,'error_description':'private-provider-description','access_token':'private-token'})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider=GitHubProfileProvider(ProfileConfiguration('client','secret','unused'),client)
+        with pytest.raises(HTTPException) as error: await provider.exchange('private-code','v'*43)
+        assert error.value.status_code==status
+        assert error.value.detail==detail
+        assert 'private' not in error.value.detail

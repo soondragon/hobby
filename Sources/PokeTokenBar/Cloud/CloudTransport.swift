@@ -37,7 +37,23 @@ final class CloudTransport: NSObject, URLSessionTaskDelegate, Sendable {
                 throw CloudError.publicProfileOnly
             }
             throw CloudError.authentication
-        case 401: throw CloudError.authentication
+        case 401:
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["TRAINER_PROFILE_MANUAL_BROWSER"] == "1", url.path == "/api/auth/github/exchange",
+               let detail = try? JSONDecoder().decode(CloudFailureDetail.self,from: data).detail,
+               ["github_authentication_failed","github_pkce_verification_failed","authentication_required"].contains(detail) {
+                throw NSError(domain: "TrainerAuthentication",code: 401,userInfo: [NSLocalizedDescriptionKey:"인증 진단: " + detail])
+            }
+            #endif
+            if url.path == "/api/auth/github/exchange" { throw CloudError.githubExchangeRejected }
+            if url.path == "/api/auth/refresh" { throw CloudError.sessionExpired }
+            throw CloudError.authentication
+        case 503:
+            if data.count <= 4096,
+               (try? JSONDecoder().decode(CloudFailureDetail.self,from: data))?.detail == "github_authentication_configuration" {
+                throw CloudError.serverAuthenticationConfiguration
+            }
+            throw CloudError.transport
         case 409: throw CloudError.conflict
         case 422: throw CloudError.growthRejected
         case 429: throw CloudError.rateLimited

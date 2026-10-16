@@ -76,3 +76,13 @@ save continuity; no existing account, email record, grant or session was deleted
 
 References: [GitHub authorization/PKCE](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps),
 [GitHub scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps).
+
+## Login diagnosis, 2026-10-16
+
+The permitted Chrome profile was verified as `yongyong92.05@gmail.com`, with GitHub `soondragon` active. The registered custom callback matches `hobbytrainer://auth/callback` without wildcard matching. GitHub's authorized-app screen still lists email read access for `Hobby Trainer Cloud`; revocation/reconsent is pending explicit user confirmation and has not been performed.
+
+A fresh PKCE/state flow through the packaged manual-browser audit app reached GitHub's authorized callback, then failed with HTTP 401 at the existing production code exchange. This is distinct from the scope guard's HTTP 403; the precise upstream code remains unverified. Prepared backend changes classify client-credential/redirect configuration errors separately from expired codes/PKCE failures, exposing no provider secrets. These backend changes have not yet been deployed: the connector returned 403, the default CLI lacks the required scope, and the permitted-profile temporary CLI refresh page keeps Allow Access disabled. Do not report successful login or a production fix from local mocks.
+
+Local regression validation: 17 Python auth tests passed; eight focused Swift persistence/authorization tests passed. Native messages now distinguish browser cancellation/start failure, invalid callback, code exchange rejection, expired saved login and server auth configuration. No server saves or GitHub grants were altered by diagnosis.
+
+The installed native app was replaced with the diagnostic-message build; release compilation, strict installed signature verification and startup passed. Final focused Swift tests passed again (8). Restricted database role schema/function execution privileges were also confirmed present. A follow-up browser account-selector attempt did not advance, so it was closed rather than reusing an expired callback. Temporary Vercel CLI device login remains pending on the permitted profile; no server-side diagnostic deployment is claimed.

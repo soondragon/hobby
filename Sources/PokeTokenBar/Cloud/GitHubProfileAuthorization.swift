@@ -32,7 +32,7 @@ struct GitHubProfileAuthorization: Sendable {
               parameters.first(where: { $0.name == "state" })?.value == state,
               let code = parameters.first(where: { $0.name == "code" })?.value,
               (1...512).contains(code.count), code.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil else {
-            throw CloudError.authentication
+            throw CloudError.invalidCallback
         }
         return code
     }
