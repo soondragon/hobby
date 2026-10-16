@@ -195,7 +195,11 @@ def test_growth_rejects_rate_spike_even_with_matching_forged_provider_ledger():
     previous = baseline(); candidate = baseline()
     candidate['claimedTodayTokensByProvider']['provider'] += 25000001
     candidate['usedSinceInstall'] = 25000001; candidate['eggUsage'] = 25000001
-    assert_rejected(previous, candidate, 'PT429')
+    uid = seed_player(previous)
+    with connect(uid) as db:
+        result = write(db, 1, uuid4(), candidate)
+        assert result['error'] == 'growth_rate_limit'
+        assert db.execute('select public.read_trainer_save()').fetchone()[0]['revision'] == 1
 
 
 @pytest.mark.parametrize('mutation', ['level','xp','stage','seed','ivs','shiny','nature','replace'])
@@ -596,3 +600,33 @@ async def test_skill_http_with_real_role_and_untrusted_payload_denial():
             assert (await client.post('/api/encounter/attack',headers=headers,json=body)).status_code==200
             assert (await client.post('/api/encounter/attack',json=body)).status_code==401
             assert (await client.post('/api/encounter/attack',headers=headers,content=b' '*8193)).status_code==413
+
+
+def test_oversized_growth_waits_durably_and_preserves_idempotency():
+    import copy
+    previous = baseline(); uid = seed_player(previous)
+    candidate = copy.deepcopy(previous)
+    candidate['claimedTodayTokensByProvider']['provider'] += 40_000_000
+    candidate['usedSinceInstall'] = candidate['eggUsage'] = 40_000_000
+    request_id = uuid4()
+    with connect(uid) as db:
+        first = write(db, 1, request_id, candidate)
+        assert first['error'] == 'growth_rate_limit' and 149 <= first['retryAfter'] <= 150
+        assert write(db, 1, request_id, candidate)['error'] == 'growth_rate_limit'
+        changed = copy.deepcopy(candidate); changed['language'] = 'ko'
+        with pytest.raises(psycopg.Error) as error:
+            write(db, 1, request_id, changed)
+        assert error.value.sqlstate == 'PT409'
+        assert db.execute('select public.read_trainer_save()').fetchone()[0]['revision'] == 1
+    with psycopg.connect(DSN, autocommit=True) as admin:
+        admin.execute("update trainer_internal.growth_wait set ready_at=clock_timestamp()-interval '1 second' where owner_id=%s", (uid,))
+    with connect(uid) as db:
+        result = write(db, 1, request_id, candidate)
+        assert result['revision'] == 2
+        assert write(db, 1, request_id, candidate) == result
+        with pytest.raises(psycopg.Error):
+            db.execute('select * from trainer_internal.growth_wait')
+    with psycopg.connect(DSN, autocommit=True) as admin:
+        assert admin.execute('select token_credit from trainer_internal.growth_policy where owner_id=%s', (uid,)).fetchone()[0] == 0
+        assert admin.execute('select count(*) from trainer_internal.growth_wait where owner_id=%s', (uid,)).fetchone()[0] == 0
+        assert admin.execute('select count(*) from trainer_internal.growth_audit where owner_id=%s and request_id=%s', (uid,request_id)).fetchone()[0] == 1

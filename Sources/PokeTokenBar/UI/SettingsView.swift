@@ -378,6 +378,7 @@ struct SettingsView: View {
                 }
                 .disabled(isCheckingUpdate)
             }
+            if let error = updater.updateError { Text(error).font(.caption).foregroundStyle(.red) }
             // 확인 결과 — 알림을 꺼둔 사용자도 여기서 새 버전을 알고 바로 적용할 수 있게 업데이트 버튼을 함께 노출.
             if didCheckUpdate, !isCheckingUpdate {
                 Divider()

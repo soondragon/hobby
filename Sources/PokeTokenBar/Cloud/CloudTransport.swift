@@ -56,7 +56,11 @@ final class CloudTransport: NSObject, URLSessionTaskDelegate, Sendable {
             throw CloudError.transport
         case 409: throw CloudError.conflict
         case 422: throw CloudError.growthRejected
-        case 429: throw CloudError.rateLimited
+        case 429:
+            if let raw = http.value(forHTTPHeaderField: "Retry-After"), let seconds = Int(raw), seconds > 0 {
+                throw CloudError.saveDeferred(min(3600, seconds))
+            }
+            throw CloudError.rateLimited
         default: throw CloudError.transport
         }
         if data.isEmpty, let empty = CloudEmptyResponse() as? T { return empty }

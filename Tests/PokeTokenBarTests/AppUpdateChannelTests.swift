@@ -23,7 +23,7 @@ final class AppUpdateChannelTests: XCTestCase {
     @MainActor
     func testCloudAcceptsOnlyItsOwnRelease() async {
         let checker = UpdateChecker(currentVersion: "0.2.0", defaults: isolatedDefaults(), channel: .cloud) {
-            .init(tag: "v0.3.0", url: "https://github.com/soondragon/hobby/releases/tag/v0.3.0")
+            .init(tag: "v0.3.0", url: "https://hobby-trainer.vercel.app/downloads/cloud/trainer-0.3.0.zip")
         }
         await checker.check()
         XCTAssertEqual(checker.available?.version, "0.3.0")

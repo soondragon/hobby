@@ -1,3 +1,5 @@
+Cloud fork: dedicated signed updates, GitHub public-profile aliases and server-only game saves. See [cloud release workflow](docs/reference/cloud-release-workflow.md).
+
 <div align="center">
 
 <img src="assets/icon.png" width="128" alt="PokeTokenBar icon">

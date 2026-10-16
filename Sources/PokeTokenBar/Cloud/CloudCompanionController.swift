@@ -49,6 +49,7 @@ final class CloudCompanionController {
     private var pending: CompanionState?
     private var inFlight: CloudSaveCommand?
     private var worker: Task<Void, Never>?
+    private var retryWorker: Task<Void, Never>?
 
     init(store: CompanionStore, configuration: CloudConfiguration?,
          authentication: (any CloudAuthenticating)? = nil, repository: (any CloudSaveServing)? = nil) {
@@ -170,11 +171,25 @@ final class CloudCompanionController {
             store?.setCloudWritable(false)
             canRetry = (error as? CloudError) != .conflict
             status = error.localizedDescription
+            if let failure = error as? CloudError, case .saveDeferred(let seconds) = failure {
+                scheduleDeferredRetry(after: seconds, operation: operation)
+            }
+        }
+    }
+
+    private func scheduleDeferredRetry(after seconds: Int, operation: UUID) {
+        retryWorker?.cancel()
+        retryWorker = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(max(1, min(3600, seconds)))) } catch { return }
+            guard let self, self.generation == operation else { return }
+            self.retryWorker = nil
+            await self.retry()
         }
     }
 
     func retry() async {
         guard !isBusy, canRetry else { return }
+        retryWorker?.cancel(); retryWorker = nil
         canRetry = false
         await drain(operation: generation)
     }
@@ -197,6 +212,7 @@ final class CloudCompanionController {
     func discardAndReload() async {
         guard !isBusy else { return }
         generation = UUID()
+        retryWorker?.cancel(); retryWorker = nil
         worker?.cancel(); worker = nil
         pending = nil; inFlight = nil
         hasUnsavedChanges = false; canRetry = false
@@ -215,6 +231,7 @@ final class CloudCompanionController {
             return
         }
         generation = UUID()
+        retryWorker?.cancel(); retryWorker = nil
         worker?.cancel(); worker = nil
         store?.replaceCloudState(CompanionState(), writable: false)
         alias = nil; revision = 0; hasRemoteSave = false

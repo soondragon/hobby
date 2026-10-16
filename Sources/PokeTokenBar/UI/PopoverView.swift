@@ -127,6 +127,7 @@ struct PopoverView: View {
                 Text(l.updateAvailable(update.version, current: updater.currentVersion))
                     .font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
+                if let error = updater.updateError { Text(error).font(.caption2).foregroundStyle(.red) }
                 HStack(spacing: 8) {
                     Spacer()
                     if updater.isUpdating {

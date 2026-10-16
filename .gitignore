@@ -46,3 +46,6 @@ server/.env.*
 !server/.env.example
 supabase/.temp/
 supabase/.branches/
+
+# Generated public distribution packages (signed metadata is tracked).
+server/releases/*.zip

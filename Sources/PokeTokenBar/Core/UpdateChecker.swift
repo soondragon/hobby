@@ -6,7 +6,7 @@ import Observation
 @MainActor
 @Observable
 final class UpdateChecker {
-    struct Available: Equatable { let version: String; let url: String }
+    struct Available: Equatable { let version: String; let url: String; var package: CloudUpdateRelease? = nil }
 
     /// What Settings should say after a check. A skipped release is not "up to date".
     enum SettingsNotice: Equatable {
@@ -19,12 +19,15 @@ final class UpdateChecker {
     struct LatestRelease: Equatable, Sendable {
         let tag: String
         let url: String
+        var package: CloudUpdateRelease? = nil
     }
 
     private(set) var available: Available?
     /// Newer release the user chose to skip. Hidden from the banner, still shown in Settings.
     private(set) var skipped: Available?
     private(set) var isUpdating = false
+    private(set) var updateError: String?
+    var canInstall: () -> Bool = { true }
 
     let channel: AppUpdateChannel
     let currentVersion: String
@@ -46,7 +49,10 @@ final class UpdateChecker {
         self.channel = channel
         self.clock = clock
         self.defaults = defaults
-        self.fetchLatest = fetchLatest ?? { await Self.liveLatestRelease(repo: channel.repository) }
+        self.fetchLatest = fetchLatest ?? {
+            if channel == .cloud { return await CloudUpdateFeed.latest() }
+            return await Self.liveLatestRelease(repo: channel.repository)
+        }
     }
 
     var settingsNotice: SettingsNotice {
@@ -71,7 +77,7 @@ final class UpdateChecker {
               channel.accepts(release.url),
               let version = Self.normalizedReleaseVersion(release.tag) else { return }
         lastChecked = clock()
-        consider(latest: version, url: release.url)
+        consider(latest: version, url: release.url, package: release.package)
     }
 
     /// NSWorkspace.open 으로 가는 릴리스 URL — https + github.com 만 허용(스킴 하이재킹 방지).
@@ -109,7 +115,7 @@ final class UpdateChecker {
     }
 
     /// Apply one fetched release. `latest` may be a tag (`v2.5.4`) or a bare version.
-    func consider(latest tag: String, url: String) {
+    func consider(latest tag: String, url: String, package: CloudUpdateRelease? = nil) {
         guard channel.accepts(url) else { return }
         let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
         let skippedVersion = defaults.string(forKey: Self.skippedVersionKey)
@@ -118,7 +124,7 @@ final class UpdateChecker {
             skipped = nil
             return
         }
-        let release = Available(version: latest, url: url)
+        let release = Available(version: latest, url: url, package: package)
         if latest == skippedVersion {
             available = nil
             skipped = release
@@ -148,8 +154,20 @@ final class UpdateChecker {
     /// 업데이트 적용: brew cask 설치본이면 `brew upgrade` 후 재시작, 아니면 릴리스 페이지.
     func applyUpdate() {
         guard let update = updateTarget, channel.accepts(update.url), !isUpdating else { return }
+        guard canInstall() else { updateError = "서버 저장을 완료한 뒤 업데이트해 주세요."; return }
         isUpdating = true
+        updateError = nil
         Task { @MainActor in
+            if channel == .cloud {
+                do {
+                    guard let package = update.package else { throw CloudError.invalidResponse }
+                    let installation = try await CloudUpdateInstaller.prepare(package)
+                    guard canInstall() else { throw CloudError.locked }
+                    try installation.launch(after: ProcessInfo.processInfo.processIdentifier)
+                    NSApp.terminate(nil)
+                } catch { updateError = "업데이트를 확인하거나 설치하지 못했습니다. 기존 앱은 유지됩니다."; isUpdating = false }
+                return
+            }
             // brew cask 설치본이면 분리(detached) 스크립트가 앱 종료 후 tap 갱신→업그레이드→재오픈.
             // 그 외(brew 미설치/비-cask 설치)면 릴리스 페이지를 연다.
             let brew = channel.allowsHomebrewUpgrade

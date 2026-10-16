@@ -20,6 +20,7 @@ private actor CloudTestRepository: CloudSaveServing {
     var commands: [CloudSaveCommand] = []
     var failNextReceipt = false
     var rejectConflicts = false
+    var deferNext = false
     var operations: [UUID: CloudSaveReceipt] = [:]
     init(owner: UUID, state: CompanionState? = nil) {
         self.owner = owner; self.state = state; revision = state == nil ? 0 : 1
@@ -30,8 +31,11 @@ private actor CloudTestRepository: CloudSaveServing {
     func read(token: String) async throws -> CloudSaveEnvelope {
         .init(ownerID: owner, alias: "trainer", schemaVersion: 1, revision: revision, state: state)
     }
+    func deferOnce() { deferNext = true }
+
     func write(_ command: CloudSaveCommand, token: String) async throws -> CloudSaveReceipt {
         commands.append(command)
+        if deferNext { deferNext = false; throw CloudError.saveDeferred(1) }
         if rejectConflicts { throw CloudError.conflict }
         if let existing = operations[command.requestID] { return existing }
         guard revision == command.expectedRevision else { throw CloudError.conflict }
@@ -111,6 +115,25 @@ final class CloudSynchronizationTests: XCTestCase {
         await controller.discardAndReload()
         XCTAssertTrue(store.canModifyCompanion)
         XCTAssertEqual(store.language, .en)
+    }
+
+    func testDeferredSaveAutomaticallyRetriesIdenticalRequest() async throws {
+        let owner = UUID(); let store = CompanionStore(cloudMode: true)
+        let repository = CloudTestRepository(owner: owner)
+        let controller = CloudCompanionController(store: store, configuration: configuration,
+            authentication: CloudTestAuthentication(owner), repository: repository)
+        await controller.connect()
+        await repository.deferOnce()
+        await controller.initialize()
+        XCTAssertTrue(controller.hasUnsavedChanges)
+        for _ in 0..<150 {
+            if !controller.hasUnsavedChanges { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let commands = await repository.receipts()
+        XCTAssertEqual(commands.count, 2)
+        XCTAssertEqual(commands.first?.requestID, commands.last?.requestID)
+        XCTAssertFalse(controller.hasUnsavedChanges)
     }
 
     func testForeignOwnerResponseNeverBecomesPlayerState() async {

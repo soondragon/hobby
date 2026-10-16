@@ -1,3 +1,5 @@
+クラウド版は専用の署名付き更新、GitHub公開プロフィール、サーバー保存を使用します。[配布手順](docs/reference/cloud-release-workflow.md)を参照してください。
+
 <div align="center">
 
 <img src="assets/icon.png" width="128" alt="PokeTokenBar アイコン">

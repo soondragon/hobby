@@ -55,7 +55,12 @@ class ProfileSessions:
         return await self.request(token, 'read')
 
     async def write(self, token, command):
-        return await self.request(token, 'write', command.model_dump(mode='json', exclude_none=True))
+        result = await self.request(token, 'write', command.model_dump(mode='json', exclude_none=True))
+        # Return the retry only after call() commits the durable admission.
+        if result.get('error') == 'growth_rate_limit':
+            delay = max(1, min(3600, int(result.get('retryAfter', 30))))
+            raise HTTPException(429, 'growth_rate_limit', headers={'Retry-After': str(delay)})
+        return result
 
     async def encounter(self, token, action, command=None):
         result = await self.call('encounter_request', (digest(token), action, Jsonb(command or {})))

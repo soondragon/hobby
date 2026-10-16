@@ -7,6 +7,7 @@ TRAINER_BINARY="$(swift build -c release --show-bin-path)/PokeTokenBar"
 TRAINER_APP="${TRAINER_APP_DESTINATION:-$HOME/Applications/PokeTokenBar Cloud.app}"
 mkdir -p "$TRAINER_APP/Contents/MacOS" "$TRAINER_APP/Contents/Resources"
 cp "$TRAINER_BINARY" "$TRAINER_APP/Contents/MacOS/PokeTokenBar"
+cp config/TrainerUpdates.json "$TRAINER_APP/Contents/Resources/TrainerUpdates.json"
 cp config/TrainerCloud.json "$TRAINER_APP/Contents/Resources/TrainerCloud.json"
 cp assets/AppIcon.icns "$TRAINER_APP/Contents/Resources/AppIcon.icns"
 python3 - "$TRAINER_APP/Contents/Info.plist" <<'PY'
@@ -17,7 +18,7 @@ with open(sys.argv[1], 'wb') as output:
         'CFBundleName': 'PokeTokenBar Cloud',
         'CFBundleExecutable': 'PokeTokenBar',
         'CFBundlePackageType': 'APPL',
-        'CFBundleShortVersionString': '0.2.0',
+        'CFBundleShortVersionString': '0.3.0',
         'CFBundleVersion': '1',
         'CFBundleIconFile': 'AppIcon',
         'LSUIElement': True,

@@ -1,3 +1,5 @@
+클라우드 브랜치: 전용 서명 업데이트, GitHub 공개 프로필 alias, 서버 전용 게임 저장을 사용합니다. [배포 절차](docs/reference/cloud-release-workflow.md)를 참고하세요.
+
 <div align="center">
 
 <img src="assets/icon.png" width="128" alt="PokeTokenBar 아이콘">

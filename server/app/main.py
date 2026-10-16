@@ -14,6 +14,7 @@ from .encounter_routes import router as encounter_router
 from psycopg_pool import AsyncConnectionPool
 from .models import SaveCommand
 from .skill_routes import router as skill_router
+from .release_routes import router as release_router
 
 MAX_BODY = 1_048_576
 
@@ -58,6 +59,7 @@ def create_app(gateway=None, profile_provider=None) -> FastAPI:
         await app.state.gateway.authenticate(parts[1])
         return parts[1]
 
+    app.include_router(release_router())
     app.include_router(router(authenticated_token))
     app.include_router(encounter_router(authenticated_token))
     app.include_router(skill_router(authenticated_token))

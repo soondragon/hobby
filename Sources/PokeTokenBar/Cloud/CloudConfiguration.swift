@@ -28,8 +28,10 @@ struct CloudConfiguration: Codable, Sendable {
 
 enum CloudError: Error, LocalizedError, Equatable {
     case configuration, authentication, transport, invalidResponse, conflict, missingSave, locked, storage, growthRejected, rateLimited, publicProfileOnly, loginCancelled, browserUnavailable, invalidCallback, githubExchangeRejected, sessionExpired, serverAuthenticationConfiguration
+    case saveDeferred(Int)
     var errorDescription: String? {
         switch self {
+        case .saveDeferred(let seconds): "서버 성장 속도에 맞춰 저장 대기 중 · 약 \(seconds)초 후 자동 재시도합니다."
         case .loginCancelled: "GitHub 로그인이 취소되었습니다. 다시 로그인해 주세요."
         case .browserUnavailable: "로그인 브라우저를 시작하지 못했습니다. Chrome이 실행 가능한지 확인해 주세요."
         case .invalidCallback: "로그인 응답이 현재 요청과 일치하지 않습니다. 이전 로그인 창을 닫고 다시 시도해 주세요."

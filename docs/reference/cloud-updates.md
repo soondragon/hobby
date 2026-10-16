@@ -1,8 +1,8 @@
 # Cloud application updates and upstream integration
 
-The cloud application explicitly selects the `soondragon/hobby` release channel at startup, regardless of packaging identity. Only the exact upstream bundle identifier `io.github.chattymin.poketokenbar` may use `chattymin/PokeTokenBar` and its Homebrew cask updater. Unknown, preview and cloud bundles fail closed to the cloud channel. Both fetched and directly considered release links must belong to the selected repository's HTTPS release-tag path; applying an update validates the link again. Cloud updates never invoke Homebrew or the upstream launch agent.
+The cloud application explicitly selects the `soondragon/hobby` release channel at startup, regardless of packaging identity. Only the exact upstream bundle identifier `io.github.chattymin.poketokenbar` may use `chattymin/PokeTokenBar` and its Homebrew cask updater. Unknown, preview and cloud bundles fail closed to the cloud channel. Both fetched and directly considered links must belong to the selected channel: cloud artifacts on the canonical cloud host, or upstream GitHub release tags for the upstream channel. Applying an update validates the link again. Cloud updates never invoke Homebrew or the upstream launch agent.
 
-This is channel isolation, not an automatic source merger. The cloud channel opens its own release page for manual installation. The repository is private: an unauthenticated GitHub latest-release request cannot discover private releases. No repository-scoped token is requested or bundled. A public signed release feed or deliberate public distribution repository remains necessary before unattended release discovery/distribution can be enabled. No cloud release artifact was published by this change.
+The cloud channel now checks `https://hobby-trainer.vercel.app/api/app-release`. The Ed25519 publisher signature is checked against the bundled public key before accepting metadata. Downloads are restricted to the canonical cloud host/path, bounded by signed byte size, checked against SHA-256, unpacked into a sibling staging folder and checked for bundle identity/version/code signature before installation. The old bundle is retained for rollback. No GitHub repository token is bundled or requested.
 
 ## Upstream integration, 2026-10-16
 
@@ -21,3 +21,19 @@ Regression coverage includes rejecting a newer upstream release for the cloud bu
 - Release build and strict ad hoc signature verification passed. Local artifact: `build/cloud-integrated-20261016/PokeTokenBar Cloud.app`.
 - The full coverage gate was attempted but interrupted after several minutes of unrelated real local-log scanning and macOS Contacts/CoreData XPC retries. It is not reported as passed; no full-suite coverage percentage is claimed. An initial test used shared defaults and failed due to a previously skipped test version; it now uses isolated defaults and passes in the final focused run.
 - No remote push, hosted deployment, production schema migration or public release was performed. The existing installed app was left running because it showed unsaved growth input pending the server rate limit. It was not overwritten or forcibly discarded. The new artifact has not been authenticated interactively; its cloud compatibility is covered by the local regression run above.
+
+## Recovery and signed feed candidate, 2026-10-16
+
+The pending production save was larger than the 25M burst cap and could never succeed by waiting for that capped bucket alone. Migration `queue_offline_growth` retains the 25M initial burst and 100k/second budget: an oversized request registers a server timestamp and SHA-256 of its immutable state/rules, waits for the remaining budget, then commits once through the original transition validator and CAS path. The durable admission is committed before HTTP 429/Retry-After is returned. Retries do not duplicate growth or bypass ownership. The private queue has RLS and no direct trainer_api table grants.
+
+Recovery backend deployment `dpl_DVJ4tTWBXpPXqTqtDykpomSxWcHy` was promoted. The existing app's exact pending request then completed through revision 18, usedSinceInstall=70226785, with no remaining admission and without discarding progress. Its bundle was backed up outside the active installation before replacement.
+
+The locally installed 0.3.0 candidate completed real GitHub sign-in and server save revision 19, then restored the same account and revision through Keychain after normal quit/relaunch. Strict installed signature verification passed. The signed release archive was verified locally, downloaded from candidate deployment `dpl_BgbFcnN81VpZC8T2jtT69Bi4Fn7W`, and matched its advertised byte size and SHA-256. Final canonical feed promotion is pending the user's cloud version confirmation required by CLAUDE.md; this is not yet claimed as the final published release. End-to-end self-update from an older client remains pending until that feed is promoted.
+
+Native focused integration run: 111 executed, 110 passed, one optional all-form network parity test skipped, zero failures. It includes the actual signed archive extraction and bundle checks. The prior full-suite gate remains incomplete as recorded above; no total coverage claim is made.
+
+Final backend regression run: 64 tests passed on the disposable local PostgreSQL database, including the public feed/download/landing and committed Retry-After behavior. The private queue advisor findings are intentional deny-all RLS with RPC-only access; no direct API grants were introduced. The existing password-auth leaked-password advisory concerns unused Supabase password authentication, not the profile-only GitHub application flow.
+
+![Existing pending save recovered](../evidence/authentication/pending-save-recovered.png)
+![New installed app restored from Keychain](../evidence/authentication/cloud-release-restored.png)
+![Staged download page, not final canonical promotion](../evidence/authentication/cloud-release-preview.png)
