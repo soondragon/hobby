@@ -97,3 +97,12 @@ A credential-handling mistake exposed the existing provider Client Secret in pri
 
 ![Real GitHub authentication and server revision read](../evidence/authentication/oauth-restored.png)
 ![Production deployment Ready](../evidence/authentication/oauth-production-ready.png)
+
+## Credential rotation verified, 2026-10-16
+
+After the user reported credential replacement, Production was redeployed with the latest project settings as `dpl_4NNq8AvSU4bLoANbUTfT6i2xJMhx` (Ready, assigned to `hobby-trainer.vercel.app`). A metadata-only GitHub check confirmed the old credential row was absent and one credential row remained; no secret value was read. This completes the outstanding rotation follow-up above.
+
+A fresh real PKCE/state login in the permitted Chrome profile authenticated `@soondragon` and read server save revision 9 through the native audit app. The backend's strict empty-scope checks passed. Game saves were not modified. This verifies the manual-browser diagnostic flow; standard release browser launch and persisted Keychain restoration were not retested in this run.
+
+![Rotated credential login and server read](../evidence/authentication/oauth-rotated-login.png)
+![Production redeployment Ready](../evidence/authentication/oauth-rotated-deployment.png)
