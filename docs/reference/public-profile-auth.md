@@ -106,3 +106,10 @@ A fresh real PKCE/state login in the permitted Chrome profile authenticated `@so
 
 ![Rotated credential login and server read](../evidence/authentication/oauth-rotated-login.png)
 ![Production redeployment Ready](../evidence/authentication/oauth-rotated-deployment.png)
+
+## Installed application verification, 2026-10-16
+
+The installed `/Users/yong/Applications/PokeTokenBar Cloud.app` was tested without the diagnostic manual-browser flow. After signing out this device through the account UI, its GitHub login action completed as `@soondragon`, with server save revision 15. The application was quit and relaunched; selecting “저장된 로그인으로 연결” restored the Keychain credential and loaded the same account and server data, reaching revision 16 after normal runtime synchronization. No credential values were inspected. Startup currently requires this explicit restore button; unattended automatic sign-in is not implemented. Initial native UI observations were delayed, so only the final connected states are treated as success evidence.
+
+![Installed application GitHub login](../evidence/authentication/installed-github-login.png)
+![Installed application Keychain restore after relaunch](../evidence/authentication/installed-keychain-restored.png)
